@@ -46,6 +46,9 @@ const SHEET_ID   = "1dRjF-db6TXdQZx44Snl6hJs1nsHIzaLz5gh-g8YiqUo";
 const SHEET_NAME = "Cronograma general";
 const YEAR       = 2026;
 const RETOS_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/retos_idrd.csv";
+// Contrato CSV (publicado por office-script-talleres.ts vía Power Automate):
+// taller,fecha,hora,lugar,participantes,grupo,sesion — fecha en dd-mm-yyyy
+const TALLERES_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/talleres_oal.csv";
 
 // ── SANITIZACIÓN ─────────────────────────────────────────────
 function sanitize(val) {
@@ -86,6 +89,38 @@ async function fetchRetosCSV() {
     const text = await res.text();
     if (!text || text.length < 20) return null;
     return text;
+  } catch(e) { return null; }
+}
+
+// taller,fecha,hora,lugar,participantes,grupo,sesion (fecha ya en dd-mm-yyyy)
+async function fetchTalleres() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(TALLERES_CSV_URL + "?t=" + Date.now(), { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (!text || text.length < 20) return null;
+    const lines = parseCSV(text);
+    if (lines.length < 2) return null;
+    const events = [];
+    for (let r = 1; r < lines.length; r++) {
+      const row = lines[r];
+      const taller = sanitize(row[0]?.trim() || "");
+      if (!taller) continue;
+      events.push({
+        taller,
+        fecha: sanitize(row[1]?.trim() || ""),
+        hora: normalizeHora(sanitize(row[2]?.trim() || "")),
+        lugar: sanitize(row[3]?.trim() || ""),
+        participantes: sanitize(row[4]?.trim() || ""),
+        grupo: parseInt(row[5]) || 1,
+        sesion: parseInt(row[6]) || 1,
+      });
+    }
+    if (events.length === 0) return null;
+    return events;
   } catch(e) { return null; }
 }
 
@@ -342,7 +377,8 @@ const PARQUE_CLR = {
 };
 
 // ── TALLERES ──────────────────────────────────────────────────
-const TALLERES = [
+// Red de seguridad si TALLERES_CSV_URL falla o no hay conexión
+const TALLERES_FALLBACK = [
   {taller:"Grupo 1 – Sesión 1",fecha:"5 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:1,sesion:1},
   {taller:"Grupo 2 – Sesión 1",fecha:"8 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:2,sesion:1},
   {taller:"Grupo 1 – Sesión 2",fecha:"12 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:1,sesion:2},
@@ -701,25 +737,39 @@ function App(){
   const [retosEvents,setRetosEvents]=useState([]);
   const [retosSource,setRetosSource]=useState("idle");
   const [filterReto,setFilterReto]=useState("ALL");
+  const [talleres,setTalleres]=useState(TALLERES_FALLBACK);
+  const [talleresSource,setTalleresSource]=useState("loading");
 
   const parquesEnriched=useMemo(()=>enrichParques(PARQUES_SEG),[]);
-  const talleresEnriched=useMemo(()=>enrichTalleres(TALLERES),[]);
+  const talleresEnriched=useMemo(()=>enrichTalleres(talleres),[talleres]);
 
-  const loadData=useCallback(async(sr)=>{
-    if(sr)setRefreshing(true);
+  const loadRecreoData=useCallback(async()=>{
     try{
       const result=await fetchCSV();
       if(result){
-        if(result.text.length>500_000){setEvents(enrichEvents(FALLBACK));setSource("offline");if(sr)setRefreshing(false);return;}
+        if(result.text.length>500_000){setEvents(enrichEvents(FALLBACK));setSource("offline");return;}
         const lines=parseCSV(result.text);
-        if(lines.length>500){setEvents(enrichEvents(FALLBACK));setSource("offline");if(sr)setRefreshing(false);return;}
+        if(lines.length>500){setEvents(enrichEvents(FALLBACK));setSource("offline");return;}
         const parsed=csvToEvents(lines);
         setDebug("Filas: "+lines.length+", eventos: "+parsed.length);
-        if(parsed.length>0){setEvents(enrichEvents(parsed));setSource(result.source);if(sr)setRefreshing(false);return;}
+        if(parsed.length>0){setEvents(enrichEvents(parsed));setSource(result.source);return;}
       }
     }catch(e){setDebug("Error: "+e.message);}
-    setEvents(enrichEvents(FALLBACK));setSource("offline");if(sr)setRefreshing(false);
+    setEvents(enrichEvents(FALLBACK));setSource("offline");
   },[]);
+
+  const loadTalleresData=useCallback(async()=>{
+    setTalleresSource("loading");
+    const result=await fetchTalleres();
+    if(result){setTalleres(result);setTalleresSource("live");}
+    else{setTalleres(TALLERES_FALLBACK);setTalleresSource("offline");}
+  },[]);
+
+  const loadData=useCallback(async(sr)=>{
+    if(sr)setRefreshing(true);
+    await Promise.all([loadRecreoData(),loadTalleresData()]);
+    if(sr)setRefreshing(false);
+  },[loadRecreoData,loadTalleresData]);
 
   useEffect(()=>{loadData();},[loadData]);
 
@@ -736,7 +786,10 @@ function App(){
   useEffect(()=>{
     if(tab==="mundial")setMonth(m=>m<5?5:m>6?6:m);
     else if(tab==="parques")setMonth(4);
-    else if(tab==="talleres")setMonth(4);
+    else if(tab==="talleres"){
+      const meses=talleresEnriched.filter(e=>e.parsed&&!e.parsed.monthOnly).map(e=>e.parsed.m);
+      setMonth(meses.length?Math.min(...meses):4);
+    }
     else if(tab==="combined")setMonth(m=>m<2?4:m);
   },[tab]);
 
@@ -1101,13 +1154,29 @@ function App(){
               <span style=${{fontSize:28}}>🎓</span>
               <div>
                 <div style=${{fontSize:15,fontWeight:800,color:"#818CF8"}}>Talleres de Innovación OAL</div>
-                <div style=${{fontSize:11,color:C.textMuted}}>2 grupos · 2 sesiones · Mayo ${YEAR}</div>
+                <div style=${{fontSize:11,color:C.textMuted}}>${(()=>{
+                  if(!talleresEnriched.length)return "Sin talleres disponibles";
+                  const grupos=new Set(talleresEnriched.map(e=>e.grupo)).size;
+                  const sesiones=new Set(talleresEnriched.map(e=>e.sesion)).size;
+                  const meses=[...new Set(talleresEnriched.filter(e=>e.parsed&&!e.parsed.monthOnly).map(e=>e.parsed.m))].sort((a,b)=>a-b);
+                  const mesesTxt=meses.length?meses.map(m=>MFULL[m]).join(" – "):MFULL[month];
+                  return `${grupos} grupo${grupos!==1?"s":""} · ${sesiones} sesión${sesiones!==1?"es":""} · ${mesesTxt} ${YEAR}`;
+                })()}</div>
               </div>
               <div style=${{marginLeft:"auto",textAlign:"right"}}>
-                <div style=${{fontSize:16,fontWeight:800,color:"#818CF8",fontFamily:"'JetBrains Mono'"}}>${TALLERES.length}</div>
+                <div style=${{fontSize:16,fontWeight:800,color:"#818CF8",fontFamily:"'JetBrains Mono'"}}>${talleresEnriched.length}</div>
                 <div style=${{fontSize:10,color:C.textMuted}}>talleres</div>
               </div>
             </div>
+          </div>
+          <div style=${{margin:"8px 16px 0",padding:"8px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border,display:"flex",alignItems:"center",gap:8}}>
+            ${talleresSource==="loading"&&html`<span style=${{fontSize:12,animation:"spin 1s linear infinite",display:"inline-block"}}>↻</span><span style=${{fontSize:12,color:C.textMuted}}>Cargando desde GitHub…</span>`}
+            ${talleresSource==="live"&&html`
+              <div style=${{width:7,height:7,borderRadius:"50%",background:"#22C55E"}}/>
+              <span style=${{fontSize:12,color:C.textMuted,flex:1}}>EN VIVO · Excel Online vía Power Automate</span>`}
+            ${talleresSource==="offline"&&html`
+              <div style=${{width:7,height:7,borderRadius:"50%",background:"#EF4444"}}/>
+              <span style=${{fontSize:12,color:"#EF4444",flex:1}}>OFFLINE · mostrando datos embebidos</span>`}
           </div>
           <div style=${{padding:"10px 16px 0",display:"flex",gap:10,alignItems:"center"}}>
             ${[1,2].map(g=>{
@@ -1235,7 +1304,7 @@ function App(){
         </div>`}
 
       <div style=${{padding:"8px 20px 20px",textAlign:"center"}}>
-        <p style=${{fontSize:10,color:C.textDim}}>${events.length} Recreolab · ${MUNDIAL.length} Mundial · ${PARQUES_SEG.length} Parques · ${TALLERES.length} Talleres · ${retosEvents.length} Retos · ${source==="live"?"Google Sheets (en vivo)":source==="csv"?"CSV":"datos embebidos"}</p>
+        <p style=${{fontSize:10,color:C.textDim}}>${events.length} Recreolab · ${MUNDIAL.length} Mundial · ${PARQUES_SEG.length} Parques · ${talleresEnriched.length} Talleres${talleresSource==="live"?" (en vivo)":talleresSource==="offline"?" (offline)":""} · ${retosEvents.length} Retos · ${source==="live"?"Google Sheets (en vivo)":source==="csv"?"CSV":"datos embebidos"}</p>
       </div>
     </div>`;
 }
