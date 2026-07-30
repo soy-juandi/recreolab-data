@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src  'none';
+    script-src   'unsafe-inline' https://unpkg.com;
+    style-src    'unsafe-inline' https://fonts.googleapis.com;
+    font-src     https://fonts.gstatic.com;
+    connect-src  https://docs.google.com https://sheets.googleapis.com https://raw.githubusercontent.com;
+    img-src      'self' data:;
+  ">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>RECREOLAB – Cronograma</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/htm@3/dist/htm.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;500;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;}
+    body{background:#0B0E14;font-family:'DM Sans',system-ui,sans-serif;}
+    ::-webkit-scrollbar{width:4px;}
+    ::-webkit-scrollbar-thumb{background:#1E2433;border-radius:4px;}
+    @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+    @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .fade-up{animation:fadeUp .35s ease both}
+    .card-hover{transition:all .2s ease}
+    .card-hover:hover{transform:translateY(-1px)}
+    .chip{transition:all .15s ease;cursor:pointer;user-select:none;border:none;}
+    .chip:hover{filter:brightness(1.15)}
+    button{font-family:'DM Sans',system-ui,sans-serif;}
+    select{font-family:'DM Sans',system-ui,sans-serif;}
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script>
+const { useState, useEffect, useMemo, useCallback } = React;
+const html = htm.bind(React.createElement);
+
+const SHEET_ID   = "1dRjF-db6TXdQZx44Snl6hJs1nsHIzaLz5gh-g8YiqUo";
+const SHEET_NAME = "Cronograma general";
+const YEAR       = 2026;
+const RETOS_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab/main/retos_idrd.csv";
+
+// ── SANITIZACIÓN ─────────────────────────────────────────────
+function sanitize(val) {
+  if (val === null || val === undefined) return "";
+  const div = document.createElement("div");
+  div.textContent = String(val).trim();
+  return div.innerHTML;
+}
+
+// ── DATA FETCHING ─────────────────────────────────────────────
+async function fetchCSV() {
+  const urls = [
+    { source:"live", url:`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}` },
+    { source:"csv",  url:`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0` },
+  ];
+  for (const {source, url} of urls) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 8000);
+      const res = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (res.ok) {
+        const text = await res.text();
+        if (text && text.length > 100) return { source, text };
+      }
+    } catch(e) {}
+  }
+  return null;
+}
+
+async function fetchRetosCSV() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(RETOS_CSV_URL, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (!text || text.length < 20) return null;
+    return text;
+  } catch(e) { return null; }
+}
+
+function parseCSV(text) {
+  const rows=[], lines=[];
+  let current="", inQuotes=false;
+  for (let i=0;i<text.length;i++) {
+    const ch=text[i];
+    if (ch==='"') { if (inQuotes&&text[i+1]==='"'){current+='"';i++;}else inQuotes=!inQuotes; }
+    else if (ch===","&&!inQuotes){rows.push(current);current="";}
+    else if ((ch==="\n"||ch==="\r")&&!inQuotes){
+      if(current||rows.length>0){rows.push(current);lines.push(rows.splice(0));current="";rows.length=0;}
+      if(ch==="\r"&&text[i+1]==="\n")i++;
+    } else current+=ch;
+  }
+  if(current||rows.length>0){rows.push(current);lines.push(rows.splice(0));}
+  return lines;
+}
+
+function normalizeHora(h) {
+  if (!h) return "";
+  return h
+    .replace(/\s*a\.?\s*m\.?/gi,"AM").replace(/\s*p\.?\s*m\.?/gi,"PM")
+    .replace(/(\d)(AM|PM)/g,"$1 $2")
+    .replace(/\s+a\s+/g," – ")
+    .replace(/\s{2,}/g," ").trim();
+}
+
+function csvToEvents(lines) {
+  if (lines.length < 2) return [];
+  const events = [];
+  let lastCtx = null;
+  for (let r=1;r<lines.length;r++) {
+    const row = lines[r];
+    const localidad = row[0]?.trim();
+    const isSubRow = !localidad || localidad === "";
+    if (isSubRow) {
+      // Sub-fila: hereda contexto de la fila principal (localidad, modalidad, enlace, gestores)
+      if (lastCtx && row[31]?.trim()) {
+        events.push({...lastCtx, tipo:"PLAYLAB", sesiones:parseInt(row[25])||1,
+          barrio:sanitize(row[27]?.trim()||""), direccion:sanitize(row[28]?.trim()||""),
+          lugar:sanitize(row[29]?.trim()||""), fecha:sanitize(row[31]?.trim()),
+          hora:normalizeHora(sanitize(row[30]?.trim()||""))});
+      }
+      continue;
+    }
+    if (localidad === "LOCALIDADES") continue;
+    const modalidad = parseInt(row[1])||0;
+    const enlace = sanitize((row[3]?.trim()||"").replace(/^Enlace:\s*/i,"").replace(/\n/g,", ").trim());
+    const gestores = sanitize(row[4]?.trim()||"");
+    lastCtx = {localidad:sanitize(localidad), modalidad, enlace, gestores};
+    if (row[6]?.trim())  events.push({...lastCtx, tipo:"ACTIVALAB",  sesiones:parseInt(row[2])||2,  barrio:sanitize(row[7]?.trim()||""),  direccion:sanitize(row[8]?.trim()||""),  lugar:sanitize(row[9]?.trim()||""),  fecha:sanitize(row[6]?.trim()),  hora:normalizeHora(sanitize(row[10]?.trim()||""))});
+    if (row[16]?.trim()) events.push({...lastCtx, tipo:"ENTRENALAB", sesiones:parseInt(row[11])||2, barrio:sanitize(row[13]?.trim()||""), direccion:sanitize(row[15]?.trim()||""), lugar:sanitize(row[14]?.trim()||""), fecha:sanitize(row[16]?.trim()), hora:normalizeHora(sanitize(row[17]?.trim()||""))});
+    if (row[23]?.trim()) events.push({...lastCtx, tipo:"FUSIONLAB",  sesiones:parseInt(row[18])||1, barrio:sanitize(row[20]?.trim()||""), direccion:sanitize(row[21]?.trim()||""), lugar:sanitize(row[22]?.trim()||""), fecha:sanitize(row[23]?.trim()), hora:normalizeHora(sanitize(row[24]?.trim()||""))});
+    if (row[31]?.trim()) events.push({...lastCtx, tipo:"PLAYLAB",    sesiones:parseInt(row[25])||1, barrio:sanitize(row[27]?.trim()||""), direccion:sanitize(row[28]?.trim()||""), lugar:sanitize(row[29]?.trim()||""), fecha:sanitize(row[31]?.trim()), hora:normalizeHora(sanitize(row[30]?.trim()||""))});
+  }
+  return events;
+}
+
+function parseRetosCSV(text) {
+  if (!text) return [];
+
+  function serialToDate(n) {
+    if (isNaN(n) || n < 40000) return null;
+    const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+    return { y: d.getUTCFullYear(), m: d.getUTCMonth(), d: d.getUTCDate() };
+  }
+  function serialToTime(n) {
+    if (isNaN(n) || n <= 0 || n >= 1) return "";
+    const totalMin = Math.round(n * 1440);
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    const hd = h > 12 ? h - 12 : h === 0 ? 12 : h;
+    return hd + ":" + m.toString().padStart(2, "0") + " " + (h >= 12 ? "PM" : "AM");
+  }
+  function normalizeTimeStr(s) {
+    if (!s) return "";
+    return s.trim()
+      .replace(/\s*a\.?\s*m\.?/gi, " AM").replace(/\s*p\.?\s*m\.?/gi, " PM")
+      .replace(/(\d)(AM|PM)/g, "$1 $2").trim();
+  }
+  function isTimeStr(s) {
+    return /^\d{1,2}:\d{2}\s*[APap]/.test(s.trim());
+  }
+
+  // Unir líneas de continuación (las que no empiezan con "RETO ")
+  const rawLines = text.split("\n");
+  const joined = [];
+  for (let i = 0; i < rawLines.length; i++) {
+    const line = rawLines[i].replace(/\r$/, "");
+    if (/^RETO \d/i.test(line) || i === 0) {
+      joined.push(line);
+    } else if (joined.length > 0) {
+      joined[joined.length - 1] += " " + line.trim();
+    }
+  }
+  if (joined.length < 2) return [];
+
+  const events = [];
+  for (let i = 1; i < joined.length; i++) {
+    const line = joined[i].trim();
+    if (!line) continue;
+
+    // Anclar en los primeros 2 campos: RETO X , serial_fecha
+    // El resto puede tener comas dentro del lugar/metodología
+    const firstComma = line.indexOf(",");
+    if (firstComma < 0) continue;
+    const reto = line.substring(0, firstComma).trim();
+    if (!/^RETO \d/i.test(reto)) continue;
+
+    const rest = line.substring(firstComma + 1);
+    const secondComma = rest.indexOf(",");
+    if (secondComma < 0) continue;
+    const fechaStr = rest.substring(0, secondComma).trim();
+    const afterFecha = rest.substring(secondComma + 1);
+
+    // Parsear fecha (serial Excel o dd/mm/yyyy)
+    const fechaNum = parseFloat(fechaStr);
+    let parsed = null;
+    if (!isNaN(fechaNum) && fechaNum > 40000) {
+      parsed = serialToDate(fechaNum);
+    } else {
+      // intentar parseDate normal
+      const m = fechaStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (m) parsed = { y: +m[3], m: +m[2]-1, d: +m[1] };
+    }
+    if (!parsed) continue;
+
+    // Ahora en afterFecha tenemos: lugar,...,horaI,horaC,asistP,metodologia,...
+    // Estrategia: buscar de derecha a izquierda campos de hora y asistentes
+    // Dividimos por coma y buscamos por patrón
+    const parts = afterFecha.split(",");
+
+    // Buscar campos de hora (serial decimal 0<x<1 o string "HH:MM [AP]M")
+    let horaI = "", horaC = "", asistP = null;
+    let lugarEndIdx = parts.length; // índice hasta donde llega el lugar
+
+    for (let j = 0; j < parts.length; j++) {
+      const val = parts[j].trim();
+      const num = parseFloat(val);
+
+      // Serial de hora (0 < n < 1)
+      if (!isNaN(num) && num > 0 && num < 1) {
+        if (!horaI) { horaI = serialToTime(num); lugarEndIdx = j; }
+        else if (!horaC) { horaC = serialToTime(num); }
+        continue;
+      }
+      // String de hora "6:00 p.m." / "4:30 PM"
+      if (isTimeStr(val)) {
+        if (!horaI) { horaI = normalizeTimeStr(val); lugarEndIdx = j; }
+        else if (!horaC) { horaC = normalizeTimeStr(val); }
+        continue;
+      }
+      // Asistentes proyectados: número entero solo
+      if (/^\d+$/.test(val) && parseInt(val) > 0 && parseInt(val) < 5000) {
+        if (horaI && !asistP) { asistP = parseInt(val); }
+      }
+    }
+
+    const lugar = sanitize(parts.slice(0, lugarEndIdx).join(",").trim());
+    let localidad = lugar.split(" - ")[0].split(".")[0].trim();
+    if (localidad.length > 35) localidad = localidad.substring(0, 35);
+
+    events.push({
+      tipo:"RETO", reto, localidad, parsed, lugar,
+      horaInicio: horaI, horaCierre: horaC,
+      asistP, asistR: null, balance: "", ejecutado: false
+    });
+  }
+  return events;
+}
+
+// ── FALLBACK DATA ─────────────────────────────────────────────
+const FALLBACK = [
+  {localidad:"Kennedy",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Ivonn Revelo, Santiago Mejia, Juan Pablo",barrio:"Salón comunal Britalia",direccion:"CR 81 B # 47 A - 16 SUR",fecha:"8 de abril",hora:"3:00 PM"},
+  {localidad:"Kennedy",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"Ivonn Revelo, Santiago Mejia, Juan Pablo",barrio:"J.A.C. Barrio Roma",direccion:"CLL 54 SUR # 78 I - 10",fecha:"10 de abril",hora:"3:00 PM"},
+  {localidad:"Kennedy",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"19 de abril",hora:""},
+  {localidad:"Kennedy",modalidad:60,tipo:"PLAYLAB",sesiones:3,enlace:"",barrio:"",direccion:"",fecha:"mayo",hora:""},
+  {localidad:"Suba",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Ivonn Revelo, Juan Pablo",barrio:"La Toma",direccion:"CLL 86 # 147 - 23",fecha:"15 de mayo",hora:"9:00 AM"},
+  {localidad:"Suba",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Casa de la Cultura de Suba",direccion:"AC 145 # 104 - 50",fecha:"22 mayo",hora:"9:00 AM"},
+  {localidad:"Engativá",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Ivonn Revelo, Vanessa Henriquez",barrio:"Jaboque - Villa Dorado",direccion:"CL 67 A # 110 - 16",fecha:"24 de abril",hora:"4:00 PM"},
+  {localidad:"Engativá",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Salón Comunal Villa el Dorado",direccion:"CL 67 A # 110 - 16",fecha:"25 de abril",hora:"9:00 AM"},
+  {localidad:"Engativá",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"26 o 27 de abril",hora:""},
+  {localidad:"Bosa",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Santiago Mejia, Diana Viancha, Estefania Gomez",barrio:"Carbonell",direccion:"Pendiente",fecha:"16 de mayo",hora:""},
+  {localidad:"Bosa",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Carbonell",direccion:"Pendiente",fecha:"mayo",hora:""},
+  {localidad:"Usme",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Erika Barreto, Diana Viancha",barrio:"Almirante Padilla",direccion:"Cl. 77 Sur #10-46",fecha:"18 de abril",hora:"10:00 AM"},
+  {localidad:"Usme",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Almirante Padilla",direccion:"Cl. 77 Sur #10-46",fecha:"21 de abril",hora:"10:00 AM"},
+  {localidad:"Usme",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"11 de mayo",hora:""},
+  {localidad:"San Cristóbal",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Diana Viancha, Ivonn Revelo",barrio:"Canadá Güira Salón Comunal",direccion:"CL 48 SUR # 0 ESTE 13",fecha:"9 de abril",hora:"6:00 PM"},
+  {localidad:"San Cristóbal",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Canadá Güira",direccion:"CL 48 SUR # 0 ESTE 13",fecha:"16 abril",hora:"6:00 PM"},
+  {localidad:"San Cristóbal",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"30 de abril",hora:""},
+  {localidad:"San Cristóbal",modalidad:60,tipo:"PLAYLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"30 de abril",hora:""},
+  {localidad:"Fontibón",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Juan Pablo, Santiago Mejia",barrio:"Salón Comunal La Cabaña",direccion:"Pendiente",fecha:"8 de mayo",hora:""},
+  {localidad:"Usaquén",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Vanessa Henriquez, Ivonn Revelo",barrio:"Santa Cecilia Baja",direccion:"CR 5 A # 164 A - 07",fecha:"2 mayo",hora:"9:00 AM"},
+  {localidad:"Usaquén",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Santa Cecilia Baja",direccion:"CR 5 A # 164 A - 07",fecha:"3 mayo",hora:""},
+  {localidad:"Usaquén",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"7 de mayo",hora:""},
+  {localidad:"Rafael Uribe U",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Erika Barreto, Juan Pablo",barrio:"Barrio Inglés",direccion:"CR 26 A # 41 - 10 SUR",fecha:"6 de abril",hora:"5:00 PM"},
+  {localidad:"Rafael Uribe U",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Barrio Inglés",direccion:"CR 26 A # 41 - 10 SUR",fecha:"13 abril",hora:"5:00 PM"},
+  {localidad:"Rafael Uribe U",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"4 de mayo",hora:""},
+  {localidad:"Rafael Uribe U",modalidad:60,tipo:"PLAYLAB",sesiones:2,enlace:"",barrio:"",direccion:"",fecha:"mayo",hora:""},
+  {localidad:"Ciudad Bolívar",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Diana Viancha, Erika Barreto",barrio:"Mochuelo",direccion:"Calle 91 B Bis Sur 18 H 14",fecha:"14 de marzo",hora:"1:00 PM"},
+  {localidad:"Ciudad Bolívar",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"I.E.D. Rural José Celestino Mutis",direccion:"Vereda Mochuelo Bajo, km 10 vía Quiba",fecha:"18 de abril",hora:"1:00 – 4:00 PM"},
+  {localidad:"Ciudad Bolívar",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"mayo",hora:""},
+  {localidad:"Ciudad Bolívar",modalidad:60,tipo:"PLAYLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"mayo",hora:""},
+  {localidad:"Los Mártires",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Santiago Mejia, Diana Viancha",barrio:"Crea La Pepita",direccion:"Pendiente",fecha:"25 de abril",hora:"1:00 PM"},
+  {localidad:"Los Mártires",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Biblioteca Ricaurte",direccion:"Pendiente",fecha:"2 mayo",hora:"1:00 PM"},
+  {localidad:"La Candelaria",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Ivonn Revelo, Juan Pablo",barrio:"La Concordia - Casa Cultural del Zipa",direccion:"CL 9 # 3 - 57",fecha:"28 de abril",hora:""},
+  {localidad:"La Candelaria",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Casa Cultural del Zipa",direccion:"CL 9 # 3 - 57",fecha:"5 de mayo",hora:""},
+  {localidad:"Antonio Nariño",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Vanessa Henriquez, Erika Barreto",barrio:"Restrepo",direccion:"Salón comunal el Restrepo Trv 24L No 14 - 80",fecha:"8 de mayo",hora:"3:00 PM"},
+  {localidad:"Antonio Nariño",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Restrepo",direccion:"Salón comunal el Restrepo Trv 24L No 14 - 80",fecha:"9 de mayo",hora:"10:00 AM"},
+  {localidad:"Antonio Nariño",modalidad:30,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"12 de mayo",hora:""},
+  {localidad:"Barrios Unidos",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Juan Pablo, Vanessa Henriquez",barrio:"Rionegro",direccion:"CL 94 # 59 - 17",fecha:"30 abril",hora:""},
+  {localidad:"Barrios Unidos",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Rionegro",direccion:"CL 94 # 59 - 17",fecha:"7 mayo",hora:""},
+  {localidad:"Puente Aranda",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Erika Barreto, Vanessa Henriquez",barrio:"El Jazmín San Eusebio",direccion:"Av. Carrera 50 # 1D 28",fecha:"26 de marzo",hora:"4:00 PM"},
+  {localidad:"Puente Aranda",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"La Ponderosa, El Jazmín y San Eusebio",direccion:"Calle 1B # 52 - 14",fecha:"27 de marzo",hora:"4:00 PM"},
+  {localidad:"Puente Aranda",modalidad:30,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"San Eusebio",direccion:"Av. 1 de Mayo #52 - 13",fecha:"18 abril",hora:"3:00 PM"},
+  {localidad:"Puente Aranda",modalidad:30,tipo:"PLAYLAB",sesiones:1,enlace:"",barrio:"Cancha Parque San Eusebio",direccion:"Av. Carrera 50 # 1D 28",fecha:"9 mayo",hora:""},
+  {localidad:"Puente Aranda",modalidad:30,tipo:"PLAYLAB",sesiones:1,enlace:"",barrio:"Parque Aguaviva, Bochica Central",direccion:"Pendiente",fecha:"16 mayo",hora:""},
+  {localidad:"Puente Aranda",modalidad:30,tipo:"PLAYLAB",sesiones:1,enlace:"",barrio:"Parque Ciudad Montes",direccion:"Pendiente",fecha:"24 mayo",hora:""},
+  {localidad:"Chapinero",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Vanessa Henriquez, Santiago Mejia",barrio:"San Luis",direccion:"Salón cultural San Luis CLL 97 NO 8 - 25",fecha:"11 de abril",hora:"3:00 PM"},
+  {localidad:"Chapinero",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"San Luis",direccion:"Salón cultural San Luis CLL 97 NO 8 - 25",fecha:"12 abril",hora:"10:00 AM"},
+  {localidad:"Chapinero",modalidad:30,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"Parque El Lago",direccion:"Pendiente",fecha:"2 mayo",hora:""},
+  {localidad:"Sumapaz",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Diana Viancha, Erika Barreto",barrio:"Vereda Tunal Alto",direccion:"Gimnasio del Campo Juan de la Cruz Varela",fecha:"25 de marzo",hora:""},
+  {localidad:"Sumapaz",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Vereda Tunal Alto",direccion:"Gimnasio del Campo Juan de la Cruz Varela",fecha:"26 mayo",hora:""},
+  {localidad:"Sumapaz",modalidad:30,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"26 mayo",hora:""},
+  {localidad:"Teusaquillo",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Santiago Mejia, Vanessa Henriquez",barrio:"La Esmeralda",direccion:"Pendiente",fecha:"Mayo",hora:""},
+  {localidad:"Tunjuelito",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Erika Barreto, Diana Viancha",barrio:"Pendiente",direccion:"Pendiente",fecha:"Mayo",hora:""},
+  {localidad:"Tunjuelito",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Pendiente",direccion:"Pendiente",fecha:"Mayo",hora:""},
+  {localidad:"Santa Fe",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Santiago Mejia, Diana Viancha",barrio:"Pendiente",direccion:"Pendiente",fecha:"Mayo",hora:""},
+];
+
+// ── PARQUES SEGURIDAD ─────────────────────────────────────────
+const PARQUES_SEG = [
+  {parque:"La Clarita",   actividad:"Prevención riñas – gestión emocional",         fecha:"7 de mayo",  hora:"3:00 PM", lugar:"Parque La Clarita",    nota:"+ Guardaparques T2: convivencia, cultura ciudadana, animales"},
+  {parque:"La Estancia",  actividad:"Sensibilización cuidado público y mobiliario",  fecha:"8 de mayo",  hora:"3:00 PM", lugar:"Parque La Estancia",   nota:"Gestión social IDRD Lorena Rodríguez + OAL Arnold Riaño y Diana Mendigaño"},
+  {parque:"La Clarita",   actividad:"Prevención violencias LGBTI",                   fecha:"13 de mayo", hora:"3:00 PM", lugar:"Parque La Clarita",    nota:"+ Guardaparques T2: convivencia, cultura ciudadana, animales. OAL Kimberly León"},
+  {parque:"La Herradura", actividad:"Reunión mesa de trabajo del parque",            fecha:"15 de mayo", hora:"10:00 AM",lugar:"Parque La Herradura",   nota:"Gestión social IDRD Constanza Sánchez + OAL Erlika Murillejo y Magda Nieto"},
+  {parque:"Fontanar del Río",actividad:"Sensibilización convivencia y cultura",      fecha:"15 de mayo", hora:"3:00 PM", lugar:"Parque Fontanar del Río",nota:"OAL Magda Nieto"},
+  {parque:"La Herradura", actividad:"Sensibilización cuidado público y mobiliario",  fecha:"16 de mayo", hora:"10:00 AM",lugar:"Parque La Herradura",   nota:"IDRD Constanza Sánchez + OAL Jerónimo Cárdenas y Erlika Murillejo"},
+  {parque:"La Estancia",  actividad:"Prevención acoso callejero",                    fecha:"20 de mayo", hora:"3:00 PM", lugar:"Parque La Estancia",   nota:"+ Guardaparques T2: convivencia, cultura, animales. OAL Magda Nieto"},
+  {parque:"Fontanar del Río",actividad:"Prevención acoso callejero",                 fecha:"20 de mayo", hora:"3:00 PM", lugar:"Parque Fontanar del Río",nota:"+ Guardaparques T2. OAL Magda Nieto"},
+  {parque:"La Herradura", actividad:"Prevención acoso callejero",                    fecha:"22 de mayo", hora:"3:00 PM", lugar:"Parque La Herradura",   nota:"+ Guardaparques. OAL Jerónimo Cárdenas"},
+  {parque:"La Clarita",   actividad:"Prevención acoso callejero",                    fecha:"22 de mayo", hora:"3:00 PM", lugar:"Parque La Clarita",    nota:"+ Guardaparques T2: convivencia, cultura, animales"},
+  {parque:"La Clarita",   actividad:"Prevención acoso callejero",                    fecha:"27 de mayo", hora:"3:00 PM", lugar:"Parque La Clarita",    nota:"+ Guardaparques T2. OAL Iván"},
+  {parque:"La Herradura", actividad:"Prevención riñas – gestión emocional",          fecha:"28 de mayo", hora:"12:30 PM",lugar:"Parque La Herradura",   nota:"+ Guardaparques: convivencia, cultura, participación. OAL Jerónimo Cárdenas"},
+  {parque:"Fontanar del Río",actividad:"Actividad central Sec. Seguridad",           fecha:"29 de mayo", hora:"4:00 PM", lugar:"Parque Fontanar del Río",nota:"Guardaparques T2: convivencia, cultura, animales. OAL Jhon Arévalo y Magda Nieto. IDRD María del Pilar Ayala"},
+];
+
+const PARQUE_CLR = {
+  "La Herradura":   {bg:"#F97316",glow:"rgba(249,115,22,0.2)"},
+  "La Clarita":     {bg:"#06B6D4",glow:"rgba(6,182,212,0.2)"},
+  "La Estancia":    {bg:"#A855F7",glow:"rgba(168,85,247,0.2)"},
+  "Fontanar del Río":{bg:"#22C55E",glow:"rgba(34,197,94,0.2)"},
+};
+
+// ── TALLERES ──────────────────────────────────────────────────
+const TALLERES = [
+  {taller:"Grupo 1 – Sesión 1",fecha:"5 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:1,sesion:1},
+  {taller:"Grupo 2 – Sesión 1",fecha:"8 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:2,sesion:1},
+  {taller:"Grupo 1 – Sesión 2",fecha:"12 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:1,sesion:2},
+  {taller:"Grupo 2 – Sesión 2",fecha:"15 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:2,sesion:2},
+];
+
+const TALLER_CLR = {
+  1:{bg:"#6366F1",glow:"rgba(99,102,241,0.2)"},
+  2:{bg:"#EC4899",glow:"rgba(236,72,153,0.2)"},
+};
+
+const RETO_CLR = {
+  "RETO 1":{bg:"#6366F1",glow:"rgba(99,102,241,0.25)"},
+  "RETO 2":{bg:"#EC4899",glow:"rgba(236,72,153,0.25)"},
+  "RETO 3":{bg:"#F59E0B",glow:"rgba(245,158,11,0.25)"},
+  "RETO 4":{bg:"#10B981",glow:"rgba(16,185,129,0.25)"},
+};
+
+// ── MUNDIAL 2026 ──────────────────────────────────────────────
+const MUNDIAL = [
+  {fase:"grupos",dia:11,mes:5,hora:"2:00 PM",local:"México",vis:"Sudáfrica",grupo:"A",estadio:"Ciudad de México",col:false},
+  {fase:"grupos",dia:11,mes:5,hora:"9:00 PM",local:"Corea del Sur",vis:"Rep. Checa",grupo:"A",estadio:"Guadalajara",col:false},
+  {fase:"grupos",dia:12,mes:5,hora:"2:00 PM",local:"Canadá",vis:"Bosnia y Herz.",grupo:"B",estadio:"Toronto",col:false},
+  {fase:"grupos",dia:12,mes:5,hora:"8:00 PM",local:"Estados Unidos",vis:"Paraguay",grupo:"D",estadio:"Los Ángeles",col:false},
+  {fase:"grupos",dia:13,mes:5,hora:"2:00 PM",local:"Catar",vis:"Suiza",grupo:"B",estadio:"San Francisco",col:false},
+  {fase:"grupos",dia:13,mes:5,hora:"5:00 PM",local:"Brasil",vis:"Marruecos",grupo:"C",estadio:"Nueva York NJ",col:false},
+  {fase:"grupos",dia:13,mes:5,hora:"8:00 PM",local:"Haití",vis:"Escocia",grupo:"C",estadio:"Boston",col:false},
+  {fase:"grupos",dia:13,mes:5,hora:"11:00 PM",local:"Australia",vis:"Turquía",grupo:"D",estadio:"Vancouver",col:false},
+  {fase:"grupos",dia:14,mes:5,hora:"12:00 PM",local:"Alemania",vis:"Curazao",grupo:"E",estadio:"Houston",col:false},
+  {fase:"grupos",dia:14,mes:5,hora:"3:00 PM",local:"Países Bajos",vis:"Japón",grupo:"F",estadio:"Dallas",col:false},
+  {fase:"grupos",dia:14,mes:5,hora:"6:00 PM",local:"Costa de Marfil",vis:"Ecuador",grupo:"E",estadio:"Filadelfia",col:false},
+  {fase:"grupos",dia:14,mes:5,hora:"9:00 PM",local:"Suecia",vis:"Túnez",grupo:"F",estadio:"Monterrey",col:false},
+  {fase:"grupos",dia:15,mes:5,hora:"11:00 AM",local:"España",vis:"Cabo Verde",grupo:"H",estadio:"Atlanta",col:false},
+  {fase:"grupos",dia:15,mes:5,hora:"2:00 PM",local:"Bélgica",vis:"Egipto",grupo:"G",estadio:"Seattle",col:false},
+  {fase:"grupos",dia:15,mes:5,hora:"5:00 PM",local:"Arabia Saudí",vis:"Uruguay",grupo:"H",estadio:"Miami",col:false},
+  {fase:"grupos",dia:15,mes:5,hora:"8:00 PM",local:"Irán",vis:"Nueva Zelanda",grupo:"G",estadio:"Los Ángeles",col:false},
+  {fase:"grupos",dia:16,mes:5,hora:"2:00 PM",local:"Francia",vis:"Senegal",grupo:"I",estadio:"Nueva York NJ",col:false},
+  {fase:"grupos",dia:16,mes:5,hora:"5:00 PM",local:"Irak",vis:"Noruega",grupo:"I",estadio:"Boston",col:false},
+  {fase:"grupos",dia:16,mes:5,hora:"8:00 PM",local:"Argentina",vis:"Argelia",grupo:"J",estadio:"Kansas City",col:false},
+  {fase:"grupos",dia:16,mes:5,hora:"11:00 PM",local:"Austria",vis:"Jordania",grupo:"J",estadio:"San Francisco",col:false},
+  {fase:"grupos",dia:17,mes:5,hora:"12:00 PM",local:"Portugal",vis:"Rep. D. Congo",grupo:"K",estadio:"Houston",col:false},
+  {fase:"grupos",dia:17,mes:5,hora:"3:00 PM",local:"Inglaterra",vis:"Croacia",grupo:"L",estadio:"Dallas",col:false},
+  {fase:"grupos",dia:17,mes:5,hora:"6:00 PM",local:"Ghana",vis:"Panamá",grupo:"L",estadio:"Toronto",col:false},
+  {fase:"grupos",dia:17,mes:5,hora:"9:00 PM",local:"Uzbekistán",vis:"Colombia",grupo:"K",estadio:"Ciudad de México",col:true},
+  {fase:"grupos",dia:18,mes:5,hora:"11:00 AM",local:"Rep. Checa",vis:"Sudáfrica",grupo:"A",estadio:"Atlanta",col:false},
+  {fase:"grupos",dia:18,mes:5,hora:"2:00 PM",local:"Suiza",vis:"Bosnia y Herz.",grupo:"B",estadio:"Los Ángeles",col:false},
+  {fase:"grupos",dia:18,mes:5,hora:"5:00 PM",local:"Canadá",vis:"Catar",grupo:"B",estadio:"Vancouver",col:false},
+  {fase:"grupos",dia:18,mes:5,hora:"8:00 PM",local:"México",vis:"Corea del Sur",grupo:"A",estadio:"Guadalajara",col:false},
+  {fase:"grupos",dia:19,mes:5,hora:"2:00 PM",local:"Estados Unidos",vis:"Australia",grupo:"D",estadio:"Seattle",col:false},
+  {fase:"grupos",dia:19,mes:5,hora:"5:00 PM",local:"Escocia",vis:"Marruecos",grupo:"C",estadio:"Boston",col:false},
+  {fase:"grupos",dia:19,mes:5,hora:"8:00 PM",local:"Brasil",vis:"Haití",grupo:"C",estadio:"Filadelfia",col:false},
+  {fase:"grupos",dia:19,mes:5,hora:"11:00 PM",local:"Turquía",vis:"Paraguay",grupo:"D",estadio:"San Francisco",col:false},
+  {fase:"grupos",dia:20,mes:5,hora:"12:00 PM",local:"Países Bajos",vis:"Suecia",grupo:"F",estadio:"Houston",col:false},
+  {fase:"grupos",dia:20,mes:5,hora:"3:00 PM",local:"Alemania",vis:"Costa de Marfil",grupo:"E",estadio:"Toronto",col:false},
+  {fase:"grupos",dia:20,mes:5,hora:"9:00 PM",local:"Ecuador",vis:"Curazao",grupo:"E",estadio:"Kansas City",col:false},
+  {fase:"grupos",dia:20,mes:5,hora:"11:00 PM",local:"Túnez",vis:"Japón",grupo:"F",estadio:"Monterrey",col:false},
+  {fase:"grupos",dia:21,mes:5,hora:"11:00 AM",local:"España",vis:"Arabia Saudí",grupo:"H",estadio:"Atlanta",col:false},
+  {fase:"grupos",dia:21,mes:5,hora:"2:00 PM",local:"Bélgica",vis:"Irán",grupo:"G",estadio:"Los Ángeles",col:false},
+  {fase:"grupos",dia:21,mes:5,hora:"5:00 PM",local:"Uruguay",vis:"Cabo Verde",grupo:"H",estadio:"Miami",col:false},
+  {fase:"grupos",dia:21,mes:5,hora:"8:00 PM",local:"Nueva Zelanda",vis:"Egipto",grupo:"G",estadio:"Vancouver",col:false},
+  {fase:"grupos",dia:22,mes:5,hora:"12:00 PM",local:"Argentina",vis:"Austria",grupo:"J",estadio:"Dallas",col:false},
+  {fase:"grupos",dia:22,mes:5,hora:"4:00 PM",local:"Francia",vis:"Irak",grupo:"I",estadio:"Filadelfia",col:false},
+  {fase:"grupos",dia:22,mes:5,hora:"7:00 PM",local:"Noruega",vis:"Senegal",grupo:"I",estadio:"Nueva York NJ",col:false},
+  {fase:"grupos",dia:22,mes:5,hora:"10:00 PM",local:"Jordania",vis:"Argelia",grupo:"J",estadio:"San Francisco",col:false},
+  {fase:"grupos",dia:23,mes:5,hora:"12:00 PM",local:"Portugal",vis:"Uzbekistán",grupo:"K",estadio:"Houston",col:false},
+  {fase:"grupos",dia:23,mes:5,hora:"3:00 PM",local:"Inglaterra",vis:"Ghana",grupo:"L",estadio:"Boston",col:false},
+  {fase:"grupos",dia:23,mes:5,hora:"6:00 PM",local:"Panamá",vis:"Croacia",grupo:"L",estadio:"Toronto",col:false},
+  {fase:"grupos",dia:23,mes:5,hora:"9:00 PM",local:"Colombia",vis:"Rep. D. Congo",grupo:"K",estadio:"Guadalajara",col:true},
+  {fase:"grupos",dia:24,mes:5,hora:"2:00 PM",local:"Suiza",vis:"Canadá",grupo:"B",estadio:"Vancouver",col:false},
+  {fase:"grupos",dia:24,mes:5,hora:"2:00 PM",local:"Bosnia",vis:"Catar",grupo:"B",estadio:"Seattle",col:false},
+  {fase:"grupos",dia:24,mes:5,hora:"5:00 PM",local:"Escocia",vis:"Brasil",grupo:"C",estadio:"Miami",col:false},
+  {fase:"grupos",dia:24,mes:5,hora:"5:00 PM",local:"Marruecos",vis:"Haití",grupo:"C",estadio:"Atlanta",col:false},
+  {fase:"grupos",dia:24,mes:5,hora:"8:00 PM",local:"Rep. Checa",vis:"México",grupo:"A",estadio:"Ciudad de México",col:false},
+  {fase:"grupos",dia:24,mes:5,hora:"8:00 PM",local:"Sudáfrica",vis:"Corea del Sur",grupo:"A",estadio:"Monterrey",col:false},
+  {fase:"grupos",dia:25,mes:5,hora:"3:00 PM",local:"Curazao",vis:"Costa de Marfil",grupo:"E",estadio:"Filadelfia",col:false},
+  {fase:"grupos",dia:25,mes:5,hora:"3:00 PM",local:"Ecuador",vis:"Alemania",grupo:"E",estadio:"Nueva York NJ",col:false},
+  {fase:"grupos",dia:25,mes:5,hora:"6:00 PM",local:"Japón",vis:"Suecia",grupo:"F",estadio:"Dallas",col:false},
+  {fase:"grupos",dia:25,mes:5,hora:"6:00 PM",local:"Túnez",vis:"Países Bajos",grupo:"F",estadio:"Kansas City",col:false},
+  {fase:"grupos",dia:25,mes:5,hora:"9:00 PM",local:"Turquía",vis:"EE.UU.",grupo:"D",estadio:"Los Ángeles",col:false},
+  {fase:"grupos",dia:25,mes:5,hora:"9:00 PM",local:"Paraguay",vis:"Australia",grupo:"D",estadio:"San Francisco",col:false},
+  {fase:"grupos",dia:26,mes:5,hora:"2:00 PM",local:"Noruega",vis:"Francia",grupo:"I",estadio:"Boston",col:false},
+  {fase:"grupos",dia:26,mes:5,hora:"2:00 PM",local:"Senegal",vis:"Irak",grupo:"I",estadio:"Toronto",col:false},
+  {fase:"grupos",dia:26,mes:5,hora:"7:00 PM",local:"Cabo Verde",vis:"Arabia Saudí",grupo:"H",estadio:"Houston",col:false},
+  {fase:"grupos",dia:26,mes:5,hora:"7:00 PM",local:"Uruguay",vis:"España",grupo:"H",estadio:"Guadalajara",col:false},
+  {fase:"grupos",dia:26,mes:5,hora:"10:00 PM",local:"Egipto",vis:"Irán",grupo:"G",estadio:"Seattle",col:false},
+  {fase:"grupos",dia:26,mes:5,hora:"10:00 PM",local:"Nueva Zelanda",vis:"Bélgica",grupo:"G",estadio:"Vancouver",col:false},
+  {fase:"grupos",dia:27,mes:5,hora:"4:00 PM",local:"Panamá",vis:"Inglaterra",grupo:"L",estadio:"Nueva York NJ",col:false},
+  {fase:"grupos",dia:27,mes:5,hora:"4:00 PM",local:"Croacia",vis:"Ghana",grupo:"L",estadio:"Filadelfia",col:false},
+  {fase:"grupos",dia:27,mes:5,hora:"6:30 PM",local:"Colombia",vis:"Portugal",grupo:"K",estadio:"Miami",col:true},
+  {fase:"grupos",dia:27,mes:5,hora:"6:30 PM",local:"Rep. D. Congo",vis:"Uzbekistán",grupo:"K",estadio:"Atlanta",col:false},
+  {fase:"grupos",dia:27,mes:5,hora:"9:00 PM",local:"Argelia",vis:"Austria",grupo:"J",estadio:"Kansas City",col:false},
+  {fase:"grupos",dia:27,mes:5,hora:"9:00 PM",local:"Jordania",vis:"Argentina",grupo:"J",estadio:"Dallas",col:false},
+  {fase:"r32",dia:28,mes:5,hora:"2:00 PM",local:"2° Grupo A",vis:"2° Grupo B",grupo:"-",estadio:"Los Ángeles",col:false},
+  {fase:"r32",dia:29,mes:5,hora:"12:00 PM",local:"1° Grupo C",vis:"2° Grupo F",grupo:"-",estadio:"Houston",col:false},
+  {fase:"r32",dia:29,mes:5,hora:"3:30 PM",local:"1° Grupo E",vis:"3° A/B/C/D/F",grupo:"-",estadio:"Boston",col:false},
+  {fase:"r32",dia:29,mes:5,hora:"8:00 PM",local:"1° Grupo F",vis:"2° Grupo C",grupo:"-",estadio:"Monterrey",col:false},
+  {fase:"r32",dia:30,mes:5,hora:"12:00 PM",local:"2° Grupo E",vis:"2° Grupo I",grupo:"-",estadio:"Dallas",col:false},
+  {fase:"r32",dia:30,mes:5,hora:"4:00 PM",local:"1° Grupo I",vis:"3° C/D/F/G/H",grupo:"-",estadio:"Nueva York NJ",col:false},
+  {fase:"r32",dia:30,mes:5,hora:"8:00 PM",local:"1° Grupo A",vis:"3° C/E/F/H/I",grupo:"-",estadio:"Ciudad de México",col:false},
+  {fase:"r32",dia:1,mes:6,hora:"11:00 AM",local:"1° Grupo L",vis:"3° E/H/I/J/K",grupo:"-",estadio:"Atlanta",col:false},
+  {fase:"r32",dia:1,mes:6,hora:"3:00 PM",local:"1° Grupo G",vis:"3° A/E/H/I/J",grupo:"-",estadio:"Seattle",col:false},
+  {fase:"r32",dia:1,mes:6,hora:"7:00 PM",local:"1° Grupo D",vis:"3° B/E/F/I/J",grupo:"-",estadio:"San Francisco",col:false},
+  {fase:"r32",dia:2,mes:6,hora:"2:00 PM",local:"1° Grupo H",vis:"2° Grupo J",grupo:"-",estadio:"Los Ángeles",col:false},
+  {fase:"r32",dia:2,mes:6,hora:"6:00 PM",local:"2° Grupo K",vis:"2° Grupo L",grupo:"-",estadio:"Toronto",col:false},
+  {fase:"r32",dia:2,mes:6,hora:"10:00 PM",local:"1° Grupo B",vis:"3° E/F/G/I/J",grupo:"-",estadio:"Vancouver",col:false},
+  {fase:"r32",dia:3,mes:6,hora:"1:00 PM",local:"2° Grupo D",vis:"2° Grupo G",grupo:"-",estadio:"Dallas",col:false},
+  {fase:"r32",dia:3,mes:6,hora:"5:00 PM",local:"1° Grupo J",vis:"2° Grupo H",grupo:"-",estadio:"Miami",col:false},
+  {fase:"r32",dia:3,mes:6,hora:"8:30 PM",local:"1° Grupo K",vis:"3° D/E/I/J/L",grupo:"-",estadio:"Kansas City",col:false},
+  {fase:"r16",dia:4,mes:6,hora:"12:00 PM",local:"G.P73",vis:"G.P75",grupo:"-",estadio:"Houston",col:false},
+  {fase:"r16",dia:4,mes:6,hora:"4:00 PM",local:"G.P74",vis:"G.P77",grupo:"-",estadio:"Filadelfia",col:false},
+  {fase:"r16",dia:5,mes:6,hora:"3:00 PM",local:"G.P76",vis:"G.P78",grupo:"-",estadio:"Nueva York NJ",col:false},
+  {fase:"r16",dia:5,mes:6,hora:"7:00 PM",local:"G.P79",vis:"G.P80",grupo:"-",estadio:"Ciudad de México",col:false},
+  {fase:"r16",dia:6,mes:6,hora:"2:00 PM",local:"G.P83",vis:"G.P84",grupo:"-",estadio:"Dallas",col:false},
+  {fase:"r16",dia:6,mes:6,hora:"7:00 PM",local:"G.P81",vis:"G.P82",grupo:"-",estadio:"Seattle",col:false},
+  {fase:"r16",dia:7,mes:6,hora:"11:00 AM",local:"G.P86",vis:"G.P88",grupo:"-",estadio:"Atlanta",col:false},
+  {fase:"r16",dia:7,mes:6,hora:"3:00 PM",local:"G.P85",vis:"G.P87",grupo:"-",estadio:"Vancouver",col:false},
+  {fase:"qf",dia:9,mes:6,hora:"3:00 PM",local:"G.P89",vis:"G.P90",grupo:"-",estadio:"Boston",col:false},
+  {fase:"qf",dia:10,mes:6,hora:"2:00 PM",local:"G.P93",vis:"G.P94",grupo:"-",estadio:"Los Ángeles",col:false},
+  {fase:"qf",dia:11,mes:6,hora:"4:00 PM",local:"G.P91",vis:"G.P92",grupo:"-",estadio:"Miami",col:false},
+  {fase:"qf",dia:11,mes:6,hora:"8:00 PM",local:"G.P95",vis:"G.P96",grupo:"-",estadio:"Kansas City",col:false},
+  {fase:"sf",dia:14,mes:6,hora:"2:00 PM",local:"G.P97",vis:"G.P98",grupo:"-",estadio:"Dallas",col:false},
+  {fase:"sf",dia:15,mes:6,hora:"2:00 PM",local:"G.P99",vis:"G.P100",grupo:"-",estadio:"Atlanta",col:false},
+  {fase:"3ro",dia:18,mes:6,hora:"4:00 PM",local:"Perdedor SF1",vis:"Perdedor SF2",grupo:"-",estadio:"Miami",col:false},
+  {fase:"final",dia:19,mes:6,hora:"2:00 PM",local:"Ganador SF1",vis:"Ganador SF2",grupo:"-",estadio:"Nueva York NJ",col:false},
+];
+
+const FASE_CFG = {
+  grupos:{label:"Grupos",color:"#3B82F6",short:"GRP"},
+  r32:   {label:"Dieciseisavos",color:"#8B5CF6",short:"R32"},
+  r16:   {label:"Octavos",color:"#EC4899",short:"R16"},
+  qf:    {label:"Cuartos",color:"#F59E0B",short:"QF"},
+  sf:    {label:"Semifinal",color:"#EF4444",short:"SF"},
+  "3ro": {label:"3er Puesto",color:"#6B7280",short:"3°"},
+  final: {label:"Final",color:"#FBBF24",short:"🏆"},
+};
+const GRUPO_CLR={A:"#F87171",B:"#FB923C",C:"#FBBF24",D:"#4ADE80",E:"#22D3EE",F:"#818CF8",G:"#F472B6",H:"#A78BFA",I:"#34D399",J:"#60A5FA",K:"#F97316",L:"#E879F9","-":"#6B7280"};
+
+// ── PARSING ───────────────────────────────────────────────────
+const MONTHS={enero:0,febrero:1,marzo:2,abril:3,mayo:4,junio:5,julio:6,agosto:7,septiembre:8,octubre:9,noviembre:10,diciembre:11};
+function parseDate(s){
+  if(!s)return null;
+  // Tomar solo la primera línea si viene multilínea
+  const firstLine=s.split(/[\n\r]/)[0];
+  let str=firstLine.toLowerCase().trim()
+    .replace("por definir","").replace("pendiente","")
+    .replace("antes del ","").replace("antes de ","")
+    .replace("por confirmar","").trim();
+  if(!str)return null;
+  // ISO: 2026-06-06 o 2026-06-06 00:00:00
+  const iso=str.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if(iso)return{y:+iso[1],m:+iso[2]-1,d:+iso[3]};
+  // dd/mm/yyyy
+  const ddmmSlash=str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(ddmmSlash)return{y:+ddmmSlash[3],m:+ddmmSlash[2]-1,d:+ddmmSlash[1]};
+  // dd-mm-yyyy (ddmmDash)
+  const ddmmDash=str.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+  if(ddmmDash)return{y:+ddmmDash[3],m:+ddmmDash[2]-1,d:+ddmmDash[1]};
+  // Mes solo: "junio"
+  for(const[n,i]of Object.entries(MONTHS)){if(str===n)return{y:YEAR,m:i,d:null,monthOnly:true};}
+  // "6 y 21 junio" / "4 y 11 Julio" — dos fechas mismo mes, tomar la primera
+  const mYMes=str.match(/(\d{1,2})\s*y\s*\d{1,2}\s*(?:de\s+)?(\w+)/);
+  if(mYMes&&MONTHS[mYMes[2]]!==undefined)return{y:YEAR,m:MONTHS[mYMes[2]],d:+mYMes[1]};
+  // "28 de junio" / "28 junio"
+  const m1=str.match(/(\d{1,2})\s*(?:de\s+)?(\w+)/);
+  if(m1&&MONTHS[m1[2]]!==undefined)return{y:YEAR,m:MONTHS[m1[2]],d:+m1[1]};
+  // "junio 28"
+  const m1b=str.match(/(\w+)\s+(\d{1,2})/);
+  if(m1b&&MONTHS[m1b[1]]!==undefined)return{y:YEAR,m:MONTHS[m1b[1]],d:+m1b[2]};
+  // "6 o 21 junio" variantes con o/0
+  const m2=str.match(/(\d{1,2})\s*[yo0]\s*\d{1,2}\s*(?:de\s+)?(\w+)/);
+  if(m2&&MONTHS[m2[2]]!==undefined)return{y:YEAR,m:MONTHS[m2[2]],d:+m2[1]};
+  // Mes en cualquier parte del string → monthOnly
+  for(const[n,i]of Object.entries(MONTHS)){if(str.includes(n))return{y:YEAR,m:i,d:null,monthOnly:true};}
+  return null;
+}
+
+function enrichEvents(evs){return evs.map(e=>({...e,parsed:parseDate(e.fecha)})).filter(e=>e.parsed);}
+function enrichParques(evs){return evs.map(e=>({...e,parsed:parseDate(e.fecha)})).filter(e=>e.parsed);}
+function enrichTalleres(evs){return evs.map(e=>({...e,parsed:parseDate(e.fecha)})).filter(e=>e.parsed);}
+
+// ── TOKENS ────────────────────────────────────────────────────
+const C={bg:"#0B0E14",surface:"#131720",border:"#1E2433",text:"#E2E8F0",textMuted:"#64748B",textDim:"#475569",accent:"#F97316",accentGlow:"rgba(249,115,22,0.15)",mundial:"#FBBF24"};
+const TIPO={
+  ACTIVALAB:{bg:"#F97316",glow:"rgba(249,115,22,0.2)",icon:"⚡",label:"Activa"},
+  ENTRENALAB:{bg:"#06B6D4",glow:"rgba(6,182,212,0.2)",icon:"🏋️",label:"Entrena"},
+  FUSIONLAB:{bg:"#A855F7",glow:"rgba(168,85,247,0.2)",icon:"🎭",label:"Fusión"},
+  PLAYLAB:{bg:"#EF4444",glow:"rgba(239,68,68,0.2)",icon:"🎲",label:"Play"},
+};
+const MFULL=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+const DNAMES=["D","L","M","M","J","V","S"];
+
+// ── COMPONENTS ────────────────────────────────────────────────
+function EventCard({ev,expanded=false}){
+  const t=TIPO[ev.tipo]||{bg:"#555",glow:"transparent",icon:"📌"};
+  const isPending=/pendiente|por definir/i.test(ev.barrio)||/pendiente|por definir/i.test(ev.direccion);
+  const dLugar=ev.lugar&&!/pendiente|por definir/i.test(ev.lugar)?ev.lugar:null;
+  const dBarrio=ev.barrio&&!/pendiente|por definir/i.test(ev.barrio)?ev.barrio:null;
+  const dDir=ev.direccion&&!/pendiente|por definir/i.test(ev.direccion)?ev.direccion:null;
+  const enlaceClean=(ev.enlace||"").replace(/^Enlace:\s*/i,"").replace(/\n/g,", ").trim();
+  return html`
+    <div class="card-hover" style=${{background:C.bg,borderRadius:12,padding:"12px 14px",marginBottom:6,border:"1px solid "+C.border,borderLeft:"3px solid "+t.bg}}>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div style=${{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:t.bg,color:"#fff",fontSize:10,fontWeight:800,boxShadow:"0 1px 4px "+t.glow}}>${t.icon} ${ev.tipo}</span>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:C.surface,color:C.text,fontSize:10,fontWeight:600,border:"1px solid "+C.border}}>${ev.localidad}</span>
+        </div>
+        <span style=${{fontSize:10,color:C.textDim,fontWeight:600,fontFamily:"'JetBrains Mono'"}}>${ev.sesiones}s</span>
+      </div>
+      <div style=${{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3}}>
+        ${ev.fecha}${ev.hora?html`<span style=${{color:C.textMuted,fontWeight:500}}> — ${ev.hora}</span>`:""}
+      </div>
+      ${expanded&&html`
+        <div style=${{marginTop:8}}>
+          ${dLugar&&html`<div style=${{fontSize:12,color:"#38BDF8",display:"flex",gap:4,marginBottom:3}}><span>🏠</span><span style=${{fontWeight:600}}>${dLugar}</span></div>`}
+          ${dBarrio&&html`<div style=${{fontSize:12,color:C.textMuted,display:"flex",gap:4,marginBottom:3}}><span>📍</span><span>${dBarrio}</span></div>`}
+          ${dDir&&html`<div style=${{fontSize:11,color:C.textDim,marginLeft:18,marginBottom:3}}>${dDir}</div>`}
+          ${enlaceClean&&html`<div style=${{fontSize:11,color:"#A78BFA",display:"flex",gap:4,marginTop:4}}><span>👤</span><span>${enlaceClean}</span></div>`}
+          ${isPending&&html`<div style=${{fontSize:10,color:"#FBBF24",marginTop:6,padding:"4px 8px",borderRadius:6,background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.15)",fontWeight:600}}>⚠️ Lugar pendiente por confirmar</div>`}
+        </div>`}
+    </div>`;
+}
+
+function MundialCard({ev}){
+  const fase=FASE_CFG[ev.fase]||{color:"#6B7280",short:"?"};
+  const gc=GRUPO_CLR[ev.grupo]||"#6B7280";
+  return html`
+    <div class="card-hover" style=${{background:C.bg,borderRadius:12,padding:"12px 14px",marginBottom:6,border:"1px solid "+C.border,borderLeft:"3px solid "+(ev.col?"#34D399":fase.color)}}>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div style=${{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:fase.color,color:"#fff",fontSize:10,fontWeight:800}}>⚽ ${fase.short}</span>
+          ${ev.grupo!=="-"&&html`<span style=${{padding:"3px 8px",borderRadius:6,background:gc+"22",color:gc,fontSize:10,fontWeight:700,border:"1px solid "+gc+"44"}}>Grp ${ev.grupo}</span>`}
+          ${ev.col&&html`<span style=${{padding:"3px 8px",borderRadius:6,background:"rgba(52,211,153,0.12)",color:"#34D399",fontSize:10,fontWeight:700,border:"1px solid rgba(52,211,153,0.3)"}}>🇨🇴 COL</span>`}
+        </div>
+        <span style=${{fontSize:10,color:C.textDim,fontWeight:600,fontFamily:"'JetBrains Mono'"}}>${ev.hora}</span>
+      </div>
+      <div style=${{fontSize:14,fontWeight:800,color:ev.col?"#34D399":C.text,lineHeight:1.2}}>
+        ${ev.local} <span style=${{color:C.textMuted,fontWeight:400,fontSize:12}}>vs</span> ${ev.vis}
+      </div>
+      <div style=${{marginTop:4,fontSize:10,color:C.textDim}}>🏟️ ${ev.estadio}</div>
+    </div>`;
+}
+
+function ParquesCard({ev}){
+  const clr=PARQUE_CLR[ev.parque]||{bg:"#6B7280",glow:"transparent"};
+  return html`
+    <div class="card-hover" style=${{background:C.bg,borderRadius:12,padding:"12px 14px",marginBottom:6,border:"1px solid "+C.border,borderLeft:"3px solid "+clr.bg}}>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div style=${{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:clr.bg,color:"#fff",fontSize:10,fontWeight:800,boxShadow:"0 1px 4px "+clr.glow}}>🛡️ ${ev.parque}</span>
+        </div>
+        <span style=${{fontSize:10,color:C.textDim,fontFamily:"'JetBrains Mono'"}}>${ev.hora}</span>
+      </div>
+      <div style=${{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3}}>${ev.actividad}</div>
+      <div style=${{marginTop:4,fontSize:11,color:C.textMuted}}>📍 ${ev.lugar}</div>
+      ${ev.nota&&html`<div style=${{marginTop:4,fontSize:10,color:C.textDim,lineHeight:1.4}}>${ev.nota}</div>`}
+    </div>`;
+}
+
+function TallerCard({ev}){
+  const clr=TALLER_CLR[ev.grupo]||{bg:"#6B7280",glow:"transparent"};
+  return html`
+    <div class="card-hover" style=${{background:C.bg,borderRadius:12,padding:"12px 14px",marginBottom:6,border:"1px solid "+C.border,borderLeft:"3px solid "+clr.bg}}>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div style=${{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:clr.bg,color:"#fff",fontSize:10,fontWeight:800,boxShadow:"0 1px 4px "+clr.glow}}>🎓 Grupo ${ev.grupo}</span>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:C.surface,color:C.text,fontSize:10,fontWeight:600,border:"1px solid "+C.border}}>Sesión ${ev.sesion}</span>
+        </div>
+        <span style=${{fontSize:10,color:C.textDim,fontFamily:"'JetBrains Mono'"}}>${ev.hora}</span>
+      </div>
+      <div style=${{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3}}>${ev.taller}</div>
+      <div style=${{marginTop:4,fontSize:11,color:C.textMuted}}>📍 ${ev.lugar}</div>
+      <div style=${{marginTop:2,fontSize:11,color:"#A78BFA"}}>👥 ${ev.participantes}</div>
+    </div>`;
+}
+
+function RetoCard({ev,expanded=false}){
+  const clr=RETO_CLR[ev.reto]||{bg:"#6B7280",glow:"transparent"};
+  return html`
+    <div class="card-hover" style=${{background:C.bg,borderRadius:12,padding:"12px 14px",marginBottom:6,border:"1px solid "+C.border,borderLeft:"3px solid "+clr.bg}}>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div style=${{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:clr.bg,color:"#fff",fontSize:10,fontWeight:800,boxShadow:"0 1px 4px "+clr.glow}}>🏆 ${ev.reto}</span>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:C.surface,color:C.text,fontSize:10,fontWeight:600,border:"1px solid "+C.border}}>${ev.localidad}</span>
+          ${ev.ejecutado&&html`<span style=${{padding:"3px 6px",borderRadius:6,background:"rgba(34,197,94,0.12)",color:"#22C55E",fontSize:9,fontWeight:700,border:"1px solid rgba(34,197,94,0.25)"}}>✓ Ejecutado</span>`}
+        </div>
+        ${ev.asistP&&html`<span style=${{fontSize:10,color:C.textDim,fontWeight:600,fontFamily:"'JetBrains Mono'"}}>${ev.asistR??"-"}/${ev.asistP}</span>`}
+      </div>
+      <div style=${{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3}}>
+        ${ev.horaInicio?html`<span style=${{color:C.textMuted,fontWeight:500}}>${ev.horaInicio}${ev.horaCierre?" – "+ev.horaCierre:""}</span>`:"Sin hora"}
+      </div>
+      ${expanded&&html`
+        <div style=${{marginTop:8}}>
+          ${ev.lugar&&html`<div style=${{fontSize:12,color:"#38BDF8",display:"flex",gap:4,marginBottom:4}}><span>📍</span><span style=${{fontWeight:600}}>${ev.lugar}</span></div>`}
+          ${!ev.ejecutado&&html`<div style=${{fontSize:10,color:"#FBBF24",marginTop:6,padding:"4px 8px",borderRadius:6,background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.15)",fontWeight:600}}>⏳ Pendiente de ejecución</div>`}
+        </div>`}
+    </div>`;
+}
+
+function MonthNav({month,setMonth,minMonth=0,maxMonth=11}){
+  return html`
+    <div style=${{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 20px 6px"}}>
+      <button onClick=${()=>setMonth(m=>Math.max(minMonth,m-1))} disabled=${month<=minMonth}
+        style=${{width:34,height:34,borderRadius:10,border:"1px solid "+C.border,background:C.surface,color:month<=minMonth?C.textDim:C.text,fontSize:16,cursor:month<=minMonth?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+      <div style=${{textAlign:"center"}}>
+        <h2 style=${{fontSize:18,fontWeight:800,letterSpacing:"-0.5px"}}>${MFULL[month]}</h2>
+        <p style=${{fontSize:11,color:C.textMuted,fontWeight:500}}>${YEAR}</p>
+      </div>
+      <button onClick=${()=>setMonth(m=>Math.min(maxMonth,m+1))} disabled=${month>=maxMonth}
+        style=${{width:34,height:34,borderRadius:10,border:"1px solid "+C.border,background:C.surface,color:month>=maxMonth?C.textDim:C.text,fontSize:16,cursor:month>=maxMonth?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>›</button>
+    </div>`;
+}
+
+function CalGrid({cells,month,dayEvents,onDayClick,accentColor,dotShape="circle"}){
+  const today=new Date();
+  return html`
+    <div style=${{padding:"8px 12px"}}>
+      <div style=${{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+        ${DNAMES.map((d,i)=>html`<div key=${i} style=${{textAlign:"center",fontSize:10,color:C.textDim,fontWeight:700,padding:"6px 0",letterSpacing:"0.5px"}}>${d}</div>`)}
+      </div>
+      <div style=${{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+        ${cells.map((day,i)=>{
+          if(!day)return html`<div key=${"e"+i}/>`;
+          const evs=dayEvents(day),has=evs.length>0;
+          const isToday=today.getDate()===day&&today.getMonth()===month&&today.getFullYear()===YEAR;
+          return html`
+            <div key=${day} onClick=${()=>has&&onDayClick(day)}
+              style=${{minHeight:50,borderRadius:10,background:has?C.surface:"transparent",border:isToday?"2px solid "+accentColor:has?"1px solid "+C.border:"1px solid transparent",padding:4,cursor:has?"pointer":"default",transition:"all 0.15s",boxShadow:has?"0 1px 4px rgba(0,0,0,0.2)":"none"}}>
+              <div style=${{fontSize:12,fontWeight:isToday?800:has?600:400,color:isToday?accentColor:has?C.text:C.textDim,textAlign:"center",marginBottom:3,fontFamily:"'JetBrains Mono'"}}>${day}</div>
+              <div style=${{display:"flex",flexWrap:"wrap",gap:2,justifyContent:"center"}}>
+                ${evs.slice(0,4).map((_,j)=>html`<div key=${j} style=${{width:7,height:7,borderRadius:dotShape==="circle"?"50%":2,background:accentColor}}/>`)}
+                ${evs.length>4&&html`<span style=${{fontSize:7,color:C.textMuted}}>+${evs.length-4}</span>`}
+              </div>
+            </div>`;
+        })}
+      </div>
+    </div>`;
+}
+
+// ── MAIN APP ──────────────────────────────────────────────────
+function App(){
+  const [events,setEvents]=useState([]);
+  const [source,setSource]=useState("loading");
+  const [month,setMonth]=useState(new Date().getMonth());
+  const [filterTipo,setFilterTipo]=useState("ALL");
+  const [filterLoc,setFilterLoc]=useState("ALL");
+  const [view,setView]=useState("cal");
+  const [selected,setSelected]=useState(null);
+  const [refreshing,setRefreshing]=useState(false);
+  const [showSetup,setShowSetup]=useState(false);
+  const [tab,setTab]=useState("recreo");
+  const [mundialFase,setMundialFase]=useState("ALL");
+  const [soloCol,setSoloCol]=useState(false);
+  const [filterParque,setFilterParque]=useState("ALL");
+  const [combineWith,setCombineWith]=useState({mundial:true,parques:true,talleres:true,retos:true});
+  const [debug,setDebug]=useState("");
+  const [retosEvents,setRetosEvents]=useState([]);
+  const [retosSource,setRetosSource]=useState("idle");
+  const [filterReto,setFilterReto]=useState("ALL");
+
+  const parquesEnriched=useMemo(()=>enrichParques(PARQUES_SEG),[]);
+  const talleresEnriched=useMemo(()=>enrichTalleres(TALLERES),[]);
+
+  const loadData=useCallback(async(sr)=>{
+    if(sr)setRefreshing(true);
+    try{
+      const result=await fetchCSV();
+      if(result){
+        if(result.text.length>500_000){setEvents(enrichEvents(FALLBACK));setSource("offline");if(sr)setRefreshing(false);return;}
+        const lines=parseCSV(result.text);
+        if(lines.length>500){setEvents(enrichEvents(FALLBACK));setSource("offline");if(sr)setRefreshing(false);return;}
+        const parsed=csvToEvents(lines);
+        setDebug("Filas: "+lines.length+", eventos: "+parsed.length);
+        if(parsed.length>0){setEvents(enrichEvents(parsed));setSource(result.source);if(sr)setRefreshing(false);return;}
+      }
+    }catch(e){setDebug("Error: "+e.message);}
+    setEvents(enrichEvents(FALLBACK));setSource("offline");if(sr)setRefreshing(false);
+  },[]);
+
+  useEffect(()=>{loadData();},[loadData]);
+
+  useEffect(()=>{
+    if((tab==="retos"||tab==="combined")&&retosSource==="idle"){
+      setRetosSource("loading");
+      fetchRetosCSV().then(text=>{
+        if(text){setRetosEvents(parseRetosCSV(text));setRetosSource("ok");}
+        else{setRetosSource("error");}
+      });
+    }
+  },[tab,retosSource]);
+
+  useEffect(()=>{
+    if(tab==="mundial")setMonth(m=>m<5?5:m>6?6:m);
+    else if(tab==="parques")setMonth(4);
+    else if(tab==="talleres")setMonth(4);
+    else if(tab==="combined")setMonth(m=>m<2?4:m);
+  },[tab]);
+
+  const locs=useMemo(()=>[...new Set(events.map(e=>e.localidad))].sort(),[events]);
+  const filtered=useMemo(()=>events.filter(e=>(filterTipo==="ALL"||e.tipo===filterTipo)&&(filterLoc==="ALL"||e.localidad===filterLoc)),[events,filterTipo,filterLoc]);
+  const mundialFiltered=useMemo(()=>MUNDIAL.filter(e=>(mundialFase==="ALL"||e.fase===mundialFase)&&(!soloCol||e.col)),[mundialFase,soloCol]);
+  const parquesFiltered=useMemo(()=>parquesEnriched.filter(e=>filterParque==="ALL"||e.parque===filterParque),[parquesEnriched,filterParque]);
+
+  const dayRecreo=useCallback((d)=>filtered.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[filtered,month]);
+  const dayMundial=useCallback((d)=>mundialFiltered.filter(e=>e.mes===month&&e.dia===d),[mundialFiltered,month]);
+  const dayParques=useCallback((d)=>parquesFiltered.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[parquesFiltered,month]);
+  const dayTalleres=useCallback((d)=>talleresEnriched.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[talleresEnriched,month]);
+  const dayRetos=useCallback((d)=>retosEvents.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[retosEvents,month]);
+
+  const monthOnlyEvents=useMemo(()=>filtered.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.monthOnly),[filtered,month]);
+  const listEvents=useMemo(()=>[...filtered].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:!a.parsed.d?1:!b.parsed.d?-1:a.parsed.d-b.parsed.d),[filtered]);
+  const mundialList=useMemo(()=>[...mundialFiltered].sort((a,b)=>a.mes!==b.mes?a.mes-b.mes:a.dia-b.dia),[mundialFiltered]);
+  const parquesList=useMemo(()=>[...parquesFiltered].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:a.parsed.d-b.parsed.d),[parquesFiltered]);
+  const talleresList=useMemo(()=>[...talleresEnriched].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:a.parsed.d-b.parsed.d),[talleresEnriched]);
+
+  const minMonth=tab==="mundial"?5:0;
+  const maxMonth=tab==="mundial"?6:11;
+
+  const daysInMonth=new Date(YEAR,month+1,0).getDate();
+  const firstDay=new Date(YEAR,month,1).getDay();
+  const cells=[];
+  for(let i=0;i<firstDay;i++)cells.push(null);
+  for(let d=1;d<=daysInMonth;d++)cells.push(d);
+
+  const stats=useMemo(()=>{const s={};for(const t of Object.keys(TIPO))s[t]=filtered.filter(e=>e.tipo===t).length;return s;},[filtered]);
+
+  const statusColor=source==="live"?"#22C55E":source==="csv"?"#06B6D4":source==="loading"?C.textMuted:"#EF4444";
+  const statusBg=source==="live"?"rgba(34,197,94,0.12)":source==="csv"?"rgba(6,182,212,0.12)":source==="loading"?"rgba(100,116,139,0.12)":"rgba(239,68,68,0.12)";
+  const statusLabel=source==="loading"?"Cargando...":source==="live"?"EN VIVO":source==="csv"?"CSV":"OFFLINE";
+
+  const TABS=[
+    {k:"recreo",icon:"📅",label:"Recreolab",clr:C.accent,bg:C.accentGlow},
+    {k:"mundial",icon:"⚽",label:"Mundial",clr:C.mundial,bg:"rgba(251,191,36,0.12)"},
+    {k:"combined",icon:"🔀",label:"Combinado",clr:"#818CF8",bg:"rgba(99,102,241,0.12)"},
+    {k:"parques",icon:"🛡️",label:"Parques",clr:"#22C55E",bg:"rgba(34,197,94,0.12)"},
+    {k:"talleres",icon:"🎓",label:"Talleres",clr:"#818CF8",bg:"rgba(99,102,241,0.12)"},
+    {k:"retos",icon:"🏆",label:"Retos",clr:"#10B981",bg:"rgba(16,185,129,0.12)"},
+  ];
+
+  return html`
+    <div style=${{fontFamily:"'DM Sans',system-ui,sans-serif",background:C.bg,color:C.text,minHeight:"100vh",maxWidth:480,margin:"0 auto"}}>
+
+      ${source==="offline"&&html`
+        <div style=${{background:"rgba(239,68,68,0.1)",borderBottom:"1px solid rgba(239,68,68,0.25)",padding:"8px 20px",fontSize:11,color:"#EF4444",fontWeight:700,textAlign:"center"}}>
+          ⚠️ Sin conexión al Sheet — datos de respaldo (pueden estar desactualizados)
+        </div>`}
+
+      <header style=${{padding:"20px 20px 0",background:"linear-gradient(145deg,"+C.surface+" 0%,"+C.bg+" 100%)",borderBottom:"1px solid "+C.border,position:"relative",overflow:"hidden"}}>
+        <div style=${{position:"absolute",top:-30,right:-30,width:120,height:120,borderRadius:"50%",background:"radial-gradient(circle,"+C.accentGlow+" 0%,transparent 70%)"}}/>
+        <div style=${{display:"flex",justifyContent:"space-between",alignItems:"flex-start",position:"relative"}}>
+          <div style=${{display:"flex",alignItems:"center",gap:8}}>
+            <div style=${{width:36,height:36,borderRadius:10,background:"linear-gradient(135deg,"+C.accent+",#DC2626)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,boxShadow:"0 4px 12px "+C.accentGlow}}>📅</div>
+            <div>
+              <h1 style=${{fontSize:20,fontWeight:800,letterSpacing:"-0.5px",lineHeight:1.1}}>RECREOLAB</h1>
+              <p style=${{fontSize:11,color:C.textMuted,fontWeight:500,marginTop:1}}>Cronograma de actividades ${YEAR}</p>
+            </div>
+          </div>
+          <div style=${{display:"flex",gap:6,alignItems:"center"}}>
+            <div style=${{padding:"4px 10px",borderRadius:20,background:statusBg,color:statusColor,fontSize:10,fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
+              <span style=${{width:6,height:6,borderRadius:"50%",background:statusColor,animation:source==="loading"?"pulse 1s infinite":"none"}}/>
+              ${statusLabel}
+            </div>
+            <button onClick=${()=>loadData(true)} disabled=${refreshing}
+              style=${{width:32,height:32,borderRadius:8,border:"1px solid "+C.border,background:C.surface,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:C.textMuted,fontSize:14,animation:refreshing?"spin 1s linear infinite":"none"}}>↻</button>
+            <button onClick=${()=>setShowSetup(!showSetup)}
+              style=${{width:32,height:32,borderRadius:8,border:"1px solid "+C.border,background:showSetup?C.accent:C.surface,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:showSetup?"#fff":C.textMuted,fontSize:14}}>?</button>
+          </div>
+        </div>
+        <div style=${{display:"flex",flexDirection:"column",gap:2,marginTop:14}}>
+          ${[[TABS[0],TABS[1],TABS[2]],[TABS[3],TABS[4],TABS[5]]].map((row,ri)=>html`
+            <div key=${ri} style=${{display:"flex",gap:2,background:C.bg,borderRadius:ri===0?"12px 12px 4px 4px":"4px 4px 12px 12px",padding:3}}>
+              ${row.map(t=>html`
+                <button key=${t.k} onClick=${()=>setTab(t.k)}
+                  style=${{flex:1,padding:"7px 4px",borderRadius:8,border:"none",cursor:"pointer",
+                    background:tab===t.k?t.bg:"transparent",
+                    color:tab===t.k?t.clr:C.textMuted,
+                    fontSize:10,fontWeight:700,
+                    borderBottom:tab===t.k?"2px solid "+t.clr:"2px solid transparent",
+                    transition:"all 0.15s",whiteSpace:"nowrap"}}>
+                  ${t.icon} ${t.label}
+                </button>`)}
+            </div>`)}
+        </div>
+      </header>
+
+      ${showSetup&&html`
+        <div class="fade-up" style=${{margin:"12px 16px",padding:"16px",borderRadius:12,background:C.surface,border:"1px solid "+C.border}}>
+          <h3 style=${{fontSize:14,fontWeight:700,marginBottom:10,color:C.accent}}>🔧 Para que la consulta en vivo funcione:</h3>
+          <div style=${{fontSize:12,color:C.textMuted,lineHeight:1.7}}>
+            <p style=${{marginBottom:8}}><strong style=${{color:C.text}}>Paso 1:</strong> Abre tu Google Sheet</p>
+            <p style=${{marginBottom:8}}><strong style=${{color:C.text}}>Paso 2:</strong> Archivo → Compartir → Publicar en la web</p>
+            <p style=${{marginBottom:8}}><strong style=${{color:C.text}}>Paso 3:</strong> Selecciona "Cronograma general" y formato "CSV"</p>
+            <p style=${{marginBottom:8}}><strong style=${{color:C.text}}>Paso 4:</strong> Haz clic en "Publicar"</p>
+            <p style=${{marginTop:12,padding:"8px 12px",borderRadius:8,background:"rgba(249,115,22,0.08)",border:"1px solid rgba(249,115,22,0.2)",color:"#FB923C"}}>💡 "Publicar en la web" ≠ "Compartir con enlace". Ambos deben estar activos.</p>
+            ${debug&&html`<p style=${{marginTop:8,fontSize:10,color:C.textDim,fontFamily:"'JetBrains Mono'"}}>Debug: ${debug}</p>`}
+          </div>
+        </div>`}
+
+      <!-- ═══════ TAB: RECREOLAB ═══════ -->
+      ${tab==="recreo"&&html`
+        <div class="fade-up">
+          <div style=${{padding:"12px 16px 8px",display:"flex",flexDirection:"column",gap:8}}>
+            <div style=${{display:"flex",gap:5,flexWrap:"wrap"}}>
+              <button class="chip" onClick=${()=>setFilterTipo("ALL")} style=${{padding:"5px 12px",borderRadius:20,fontSize:11,fontWeight:700,background:filterTipo==="ALL"?C.text:C.surface,color:filterTipo==="ALL"?C.bg:C.textMuted}}>TODOS</button>
+              ${Object.entries(TIPO).map(([k,v])=>html`
+                <button key=${k} class="chip" onClick=${()=>setFilterTipo(filterTipo===k?"ALL":k)}
+                  style=${{padding:"5px 12px",borderRadius:20,fontSize:11,fontWeight:700,background:filterTipo===k?v.bg:C.surface,color:filterTipo===k?"#fff":C.textMuted,boxShadow:filterTipo===k?"0 2px 8px "+v.glow:"none"}}>
+                  ${v.icon} ${v.label}</button>`)}
+            </div>
+            <div style=${{display:"flex",gap:6}}>
+              <select value=${filterLoc} onChange=${e=>setFilterLoc(e.target.value)}
+                style=${{flex:1,padding:"8px 12px",borderRadius:10,border:"1px solid "+C.border,background:C.surface,color:C.text,fontSize:12,cursor:"pointer",appearance:"none",backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E\")",backgroundRepeat:"no-repeat",backgroundPosition:"right 12px center"}}>
+                <option value="ALL">📍 Todas las localidades</option>
+                ${locs.map(l=>html`<option key=${l} value=${l}>${l}</option>`)}
+              </select>
+              <div style=${{display:"flex",borderRadius:10,overflow:"hidden",border:"1px solid "+C.border}}>
+                ${[{k:"cal",icon:"📅"},{k:"list",icon:"☰"}].map(v=>html`
+                  <button key=${v.k} onClick=${()=>setView(v.k)}
+                    style=${{width:40,height:38,border:"none",cursor:"pointer",background:view===v.k?C.accent:C.surface,color:view===v.k?"#fff":C.textMuted,fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",transition:"all 0.15s"}}>${v.icon}</button>`)}
+              </div>
+            </div>
+          </div>
+          ${view==="cal"?html`
+            <${MonthNav} month=${month} setMonth=${setMonth} minMonth=${0} maxMonth=${11}/>
+            <${CalGrid} cells=${cells} month=${month} dayEvents=${dayRecreo} accentColor=${C.accent} dotShape="circle"
+              onDayClick=${day=>{const evs=dayRecreo(day);if(evs.length)setSelected({evs,day,tipo:"recreo"});}}/>
+            ${monthOnlyEvents.length>0&&html`
+              <div style=${{padding:"10px 16px 4px"}}>
+                <p style=${{fontSize:10,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:"1px",marginBottom:8}}>📌 Sin fecha exacta — ${MFULL[month]}</p>
+                ${monthOnlyEvents.map((ev,i)=>html`<${EventCard} key=${i} ev=${ev}/>`)}
+              </div>`}
+            <div style=${{padding:"12px 16px 20px"}}>
+              <div style=${{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+                ${Object.entries(TIPO).map(([k,v])=>html`
+                  <div key=${k} style=${{background:C.surface,borderRadius:10,padding:"10px 8px",textAlign:"center",border:"1px solid "+C.border}}>
+                    <div style=${{fontSize:16}}>${v.icon}</div>
+                    <div style=${{fontSize:20,fontWeight:800,color:v.bg,fontFamily:"'JetBrains Mono'"}}>${stats[k]||0}</div>
+                    <div style=${{fontSize:8,color:C.textMuted,fontWeight:700,letterSpacing:"0.5px",marginTop:1}}>${k}</div>
+                  </div>`)}
+              </div>
+            </div>`:html`
+            <div class="fade-up" style=${{padding:"12px 16px 24px"}}>
+              ${listEvents.length===0&&html`<div style=${{textAlign:"center",padding:60,color:C.textMuted}}><div style=${{fontSize:40,marginBottom:8}}>🔍</div><p>No hay eventos con estos filtros</p></div>`}
+              ${(()=>{let lm=-1;return listEvents.map((ev,i)=>{const h=ev.parsed.m!==lm;lm=ev.parsed.m;return html`<div key=${i}>${h&&html`<div style=${{fontSize:13,fontWeight:800,color:C.accent,padding:"16px 0 8px",letterSpacing:"-0.3px",borderBottom:"1px solid "+C.border,marginBottom:8}}>${MFULL[ev.parsed.m]} ${YEAR}</div>`}<${EventCard} ev=${ev} expanded=${true}/></div>`;});})()} 
+            </div>`}
+        </div>`}
+
+      <!-- ═══════ TAB: MUNDIAL ═══════ -->
+      ${tab==="mundial"&&html`
+        <div class="fade-up">
+          <div style=${{margin:"12px 16px 0",borderRadius:14,background:"linear-gradient(135deg,rgba(251,191,36,0.08),rgba(239,68,68,0.05))",border:"1px solid rgba(251,191,36,0.2)",padding:"14px 16px"}}>
+            <div style=${{display:"flex",alignItems:"center",gap:10}}>
+              <span style=${{fontSize:28}}>🏆</span>
+              <div>
+                <div style=${{fontSize:15,fontWeight:800,color:C.mundial}}>FIFA World Cup 2026™</div>
+                <div style=${{fontSize:11,color:C.textMuted}}>EE.UU. · Canadá · México | 11 Jun – 19 Jul 2026</div>
+              </div>
+              <div style=${{marginLeft:"auto",textAlign:"right"}}>
+                <div style=${{fontSize:12,color:"#34D399",fontWeight:800}}>🇨🇴 Colombia</div>
+                <div style=${{fontSize:10,color:C.textMuted}}>Grupo K</div>
+              </div>
+            </div>
+          </div>
+          <div style=${{padding:"10px 16px 0",display:"flex",gap:5,flexWrap:"wrap"}}>
+            <button class="chip" onClick=${()=>setMundialFase("ALL")} style=${{padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,background:mundialFase==="ALL"?C.mundial:C.surface,color:mundialFase==="ALL"?C.bg:C.textMuted}}>TODOS</button>
+            ${Object.entries(FASE_CFG).map(([k,v])=>html`
+              <button key=${k} class="chip" onClick=${()=>setMundialFase(mundialFase===k?"ALL":k)}
+                style=${{padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,background:mundialFase===k?v.color:C.surface,color:mundialFase===k?"#fff":C.textMuted}}>${v.short}</button>`)}
+          </div>
+          <div style=${{padding:"8px 16px 4px",display:"flex",alignItems:"center",gap:8}}>
+            <button onClick=${()=>setSoloCol(!soloCol)} style=${{padding:"5px 12px",borderRadius:20,border:"1px solid "+(soloCol?"rgba(52,211,153,0.3)":C.border),background:soloCol?"rgba(52,211,153,0.1)":C.surface,color:soloCol?"#34D399":C.textMuted,fontSize:11,fontWeight:700,cursor:"pointer"}}>🇨🇴 Solo Colombia</button>
+            <span style=${{fontSize:10,color:C.textDim}}>${MUNDIAL.filter(e=>e.col).length} partidos</span>
+          </div>
+          <${MonthNav} month=${month} setMonth=${setMonth} minMonth=${5} maxMonth=${6}/>
+          <div style=${{padding:"8px 12px"}}>
+            <div style=${{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+              ${DNAMES.map((d,i)=>html`<div key=${i} style=${{textAlign:"center",fontSize:10,color:C.textDim,fontWeight:700,padding:"6px 0",letterSpacing:"0.5px"}}>${d}</div>`)}
+            </div>
+            <div style=${{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+              ${cells.map((day,i)=>{
+                if(!day)return html`<div key=${"e"+i}/>`;
+                const evs=dayMundial(day),has=evs.length>0;
+                const today=new Date(),isToday=today.getDate()===day&&today.getMonth()===month&&today.getFullYear()===YEAR;
+                return html`
+                  <div key=${day} onClick=${()=>has&&setSelected({evs,day,tipo:"mundial"})}
+                    style=${{minHeight:50,borderRadius:10,background:has?C.surface:"transparent",border:isToday?"2px solid "+C.mundial:has?"1px solid "+C.border:"1px solid transparent",padding:4,cursor:has?"pointer":"default",transition:"all 0.15s"}}>
+                    <div style=${{fontSize:12,fontWeight:isToday?800:has?600:400,color:isToday?C.mundial:has?C.text:C.textDim,textAlign:"center",marginBottom:3,fontFamily:"'JetBrains Mono'"}}>${day}</div>
+                    <div style=${{display:"flex",flexWrap:"wrap",gap:2,justifyContent:"center"}}>
+                      ${evs.slice(0,4).map((ev,j)=>html`<div key=${j} style=${{width:7,height:7,borderRadius:2,background:ev.col?"#34D399":FASE_CFG[ev.fase]?.color||"#555"}}/>`)}
+                      ${evs.length>4&&html`<span style=${{fontSize:7,color:C.textMuted}}>+${evs.length-4}</span>`}
+                    </div>
+                  </div>`;
+              })}
+            </div>
+          </div>
+          <div style=${{padding:"8px 16px 24px"}}>
+            ${(()=>{
+              const mEvs=mundialList.filter(ev=>ev.mes===month);
+              if(!mEvs.length)return html`<div style=${{textAlign:"center",padding:40,color:C.textMuted}}><div style=${{fontSize:32,marginBottom:8}}>⚽</div><p>Sin partidos con estos filtros</p></div>`;
+              let lastDay=-1;
+              return mEvs.map((ev,i)=>{
+                const isNew=ev.dia!==lastDay;lastDay=ev.dia;
+                const wd=new Date(YEAR,ev.mes,ev.dia).toLocaleDateString("es-CO",{weekday:"long"});
+                return html`<div key=${i}>
+                  ${isNew&&html`<div style=${{display:"flex",alignItems:"center",gap:8,padding:"12px 0 6px",borderBottom:"1px solid "+C.border,marginBottom:6}}>
+                    <div style=${{fontSize:20,fontWeight:800,color:C.mundial,fontFamily:"'JetBrains Mono'"}}>${ev.dia}</div>
+                    <div><div style=${{fontSize:12,fontWeight:700,color:C.text,textTransform:"capitalize"}}>${wd}</div><div style=${{fontSize:10,color:C.textMuted}}>${MFULL[ev.mes]} 2026</div></div>
+                  </div>`}
+                  <${MundialCard} ev=${ev}/>
+                </div>`;
+              });
+            })()}
+          </div>
+        </div>`}
+
+      <!-- ═══════ TAB: COMBINADO ═══════ -->
+      ${tab==="combined"&&html`
+        <div class="fade-up">
+          <div style=${{margin:"12px 16px 0",padding:"14px",borderRadius:12,background:C.surface,border:"1px solid "+C.border}}>
+            <div style=${{fontSize:11,fontWeight:700,color:"#818CF8",marginBottom:10,letterSpacing:"0.5px"}}>🔀 VISTA COMBINADA — Cruces con Recreolab</div>
+            <div style=${{display:"flex",gap:6,flexWrap:"wrap"}}>
+              ${[{k:"mundial",label:"⚽ Mundial",clr:C.mundial},{k:"parques",label:"🛡️ Parques",clr:"#22C55E"},{k:"talleres",label:"🎓 Talleres",clr:"#6366F1"},{k:"retos",label:"🏆 Retos",clr:"#10B981"}].map(({k,label,clr})=>html`
+                <button key=${k} onClick=${()=>setCombineWith(p=>({...p,[k]:!p[k]}))}
+                  style=${{padding:"6px 12px",borderRadius:20,border:"2px solid "+(combineWith[k]?clr:C.border),background:combineWith[k]?clr+"18":"transparent",color:combineWith[k]?clr:C.textMuted,fontSize:11,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}}>
+                  ${label} ${combineWith[k]?"✓":""}
+                </button>`)}
+            </div>
+            <div style=${{display:"flex",gap:12,flexWrap:"wrap",marginTop:10,paddingTop:10,borderTop:"1px solid "+C.border}}>
+              <div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:"50%",background:C.accent}}/><span style=${{fontSize:10,color:C.textMuted}}>Recreolab</span></div>
+              ${combineWith.mundial&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:C.mundial}}/><span style=${{fontSize:10,color:C.textMuted}}>Mundial</span></div>`}
+              ${combineWith.parques&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:"#22C55E"}}/><span style=${{fontSize:10,color:C.textMuted}}>Parques</span></div>`}
+              ${combineWith.talleres&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:"#6366F1"}}/><span style=${{fontSize:10,color:C.textMuted}}>Talleres</span></div>`}
+              ${combineWith.retos&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:"#10B981"}}/><span style=${{fontSize:10,color:C.textMuted}}>Retos</span></div>`}
+              <div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:3,background:"rgba(239,68,68,0.3)",border:"2px solid #EF4444"}}/><span style=${{fontSize:10,color:"#EF4444",fontWeight:700}}>⚠️ Cruce</span></div>
+            </div>
+          </div>
+          <${MonthNav} month=${month} setMonth=${setMonth} minMonth=${0} maxMonth=${11}/>
+          <div style=${{padding:"8px 12px"}}>
+            <div style=${{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
+              ${DNAMES.map((d,i)=>html`<div key=${i} style=${{textAlign:"center",fontSize:10,color:C.textDim,fontWeight:700,padding:"6px 0"}}>${d}</div>`)}
+            </div>
+            <div style=${{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
+              ${cells.map((day,i)=>{
+                if(!day)return html`<div key=${"e"+i}/>`;
+                const rEvs=dayRecreo(day);
+                const mEvs=combineWith.mundial?dayMundial(day):[];
+                const pEvs=combineWith.parques?dayParques(day):[];
+                const tEvs=combineWith.talleres?dayTalleres(day):[];
+                const reEvs=combineWith.retos?dayRetos(day):[];
+                const hasR=rEvs.length>0,hasOther=mEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0;
+                const hasAny=hasR||hasOther,isConflict=hasR&&hasOther;
+                const today=new Date(),isToday=today.getDate()===day&&today.getMonth()===month&&today.getFullYear()===YEAR;
+                return html`
+                  <div key=${day} onClick=${()=>{if(hasAny)setSelected({recreo:rEvs,mundial:mEvs,parques:pEvs,talleres:tEvs,retos:reEvs,day,tipo:"combined"});}}
+                    style=${{minHeight:52,borderRadius:10,background:isConflict?"rgba(239,68,68,0.06)":hasAny?C.surface:"transparent",border:isConflict?"2px solid rgba(239,68,68,0.4)":isToday?"2px solid "+C.accent:hasAny?"1px solid "+C.border:"1px solid transparent",padding:4,cursor:hasAny?"pointer":"default",transition:"all 0.15s"}}>
+                    <div style=${{fontSize:12,fontWeight:isToday?800:hasAny?600:400,color:isConflict?"#EF4444":isToday?C.accent:hasAny?C.text:C.textDim,textAlign:"center",marginBottom:2,fontFamily:"'JetBrains Mono'"}}>${day}</div>
+                    ${isConflict&&html`<div style=${{fontSize:7,textAlign:"center",marginBottom:1}}>⚠️</div>`}
+                    <div style=${{display:"flex",flexWrap:"wrap",gap:1,justifyContent:"center"}}>
+                      ${rEvs.slice(0,2).map((_,j)=>html`<div key=${"r"+j} style=${{width:6,height:6,borderRadius:"50%",background:C.accent}}/>`)}
+                      ${mEvs.slice(0,1).map((_,j)=>html`<div key=${"m"+j} style=${{width:6,height:6,borderRadius:2,background:C.mundial}}/>`)}
+                      ${pEvs.slice(0,1).map((_,j)=>html`<div key=${"p"+j} style=${{width:6,height:6,borderRadius:2,background:"#22C55E"}}/>`)}
+                      ${tEvs.slice(0,1).map((_,j)=>html`<div key=${"t"+j} style=${{width:6,height:6,borderRadius:2,background:"#6366F1"}}/>`)}
+                      ${reEvs.slice(0,1).map((_,j)=>html`<div key=${"re"+j} style=${{width:6,height:6,borderRadius:2,background:"#10B981"}}/>`)}
+                    </div>
+                  </div>`;
+              })}
+            </div>
+          </div>
+          <div style=${{padding:"8px 16px 24px"}}>
+            ${(()=>{
+              const daysSet=new Set([
+                ...filtered.filter(e=>e.parsed&&e.parsed.m===month&&!e.parsed.monthOnly).map(e=>e.parsed.d),
+                ...(combineWith.mundial?MUNDIAL.filter(e=>e.mes===month).map(e=>e.dia):[]),
+                ...(combineWith.parques?parquesEnriched.filter(e=>e.parsed&&e.parsed.m===month&&!e.parsed.monthOnly).map(e=>e.parsed.d):[]),
+                ...(combineWith.talleres?talleresEnriched.filter(e=>e.parsed&&e.parsed.m===month&&!e.parsed.monthOnly).map(e=>e.parsed.d):[]),
+                ...(combineWith.retos?retosEvents.filter(e=>e.parsed&&e.parsed.m===month).map(e=>e.parsed.d):[]),
+              ]);
+              const sorted=[...daysSet].sort((a,b)=>a-b);
+              if(!sorted.length)return html`<div style=${{textAlign:"center",padding:40,color:C.textMuted}}><div style=${{fontSize:32,marginBottom:8}}>📭</div><p>Sin eventos en ${MFULL[month]}</p></div>`;
+              return sorted.map(day=>{
+                const rEvs=dayRecreo(day);
+                const mEvs=combineWith.mundial?dayMundial(day):[];
+                const pEvs=combineWith.parques?dayParques(day):[];
+                const tEvs=combineWith.talleres?dayTalleres(day):[];
+                const reEvs=combineWith.retos?dayRetos(day):[];
+                const isConflict=rEvs.length>0&&(mEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0);
+                const wd=new Date(YEAR,month,day).toLocaleDateString("es-CO",{weekday:"long"});
+                return html`<div key=${day} style=${{marginBottom:16}}>
+                  <div style=${{display:"flex",alignItems:"center",gap:8,padding:"10px 0 6px",borderBottom:"1px solid "+(isConflict?"rgba(239,68,68,0.3)":C.border),marginBottom:6}}>
+                    <div style=${{fontSize:20,fontWeight:800,color:isConflict?"#EF4444":C.text,fontFamily:"'JetBrains Mono'"}}>${day}</div>
+                    <div><div style=${{fontSize:12,fontWeight:700,color:C.text,textTransform:"capitalize"}}>${wd}</div><div style=${{fontSize:10,color:C.textMuted}}>${MFULL[month]} 2026</div></div>
+                    ${isConflict&&html`<div style=${{marginLeft:"auto",padding:"3px 8px",borderRadius:20,background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.25)",fontSize:10,color:"#EF4444",fontWeight:700}}>⚠️ Cruce</div>`}
+                  </div>
+                  ${rEvs.length>0&&html`<div style=${{fontSize:10,color:C.accent,fontWeight:700,marginBottom:4,letterSpacing:"0.5px"}}>📅 RECREOLAB</div>${rEvs.map((ev,i)=>html`<${EventCard} key=${"r"+i} ev=${ev} expanded=${true}/>`)}`}
+                  ${mEvs.length>0&&html`<div style=${{fontSize:10,color:C.mundial,fontWeight:700,margin:(rEvs.length>0?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>⚽ MUNDIAL</div>${mEvs.map((ev,i)=>html`<${MundialCard} key=${"m"+i} ev=${ev}/>`)}`}
+                  ${pEvs.length>0&&html`<div style=${{fontSize:10,color:"#22C55E",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🛡️ PARQUES</div>${pEvs.map((ev,i)=>html`<${ParquesCard} key=${"p"+i} ev=${ev}/>`)}`}
+                  ${tEvs.length>0&&html`<div style=${{fontSize:10,color:"#6366F1",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0||pEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🎓 TALLERES</div>${tEvs.map((ev,i)=>html`<${TallerCard} key=${"t"+i} ev=${ev}/>`)}`}
+                  ${reEvs.length>0&&html`<div style=${{fontSize:10,color:"#10B981",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0||pEvs.length>0||tEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🏆 RETOS</div>${reEvs.map((ev,i)=>html`<${RetoCard} key=${"re"+i} ev=${ev} expanded=${true}/>`)}`}
+                </div>`;
+              });
+            })()}
+          </div>
+        </div>`}
+
+      <!-- ═══════ TAB: PARQUES ═══════ -->
+      ${tab==="parques"&&html`
+        <div class="fade-up">
+          <div style=${{margin:"12px 16px 0",borderRadius:14,background:"linear-gradient(135deg,rgba(34,197,94,0.08),rgba(6,182,212,0.05))",border:"1px solid rgba(34,197,94,0.2)",padding:"14px 16px"}}>
+            <div style=${{display:"flex",alignItems:"center",gap:10}}>
+              <span style=${{fontSize:28}}>🛡️</span>
+              <div>
+                <div style=${{fontSize:15,fontWeight:800,color:"#22C55E"}}>Parques Sec. Seguridad</div>
+                <div style=${{fontSize:11,color:C.textMuted}}>Cronograma de actividades Abril – Mayo ${YEAR}</div>
+              </div>
+              <div style=${{marginLeft:"auto",textAlign:"right"}}>
+                <div style=${{fontSize:16,fontWeight:800,color:"#22C55E",fontFamily:"'JetBrains Mono'"}}>${PARQUES_SEG.length}</div>
+                <div style=${{fontSize:10,color:C.textMuted}}>actividades</div>
+              </div>
+            </div>
+          </div>
+          <div style=${{padding:"10px 16px 0",display:"flex",gap:5,flexWrap:"wrap"}}>
+            <button class="chip" onClick=${()=>setFilterParque("ALL")} style=${{padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,background:filterParque==="ALL"?"#22C55E":C.surface,color:filterParque==="ALL"?C.bg:C.textMuted}}>TODOS</button>
+            ${Object.keys(PARQUE_CLR).map(p=>{
+              const clr=PARQUE_CLR[p];
+              return html`<button key=${p} class="chip" onClick=${()=>setFilterParque(filterParque===p?"ALL":p)}
+                style=${{padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,background:filterParque===p?clr.bg:C.surface,color:filterParque===p?"#fff":C.textMuted}}>🛡️ ${p}</button>`;
+            })}
+          </div>
+          <${MonthNav} month=${month} setMonth=${setMonth} minMonth=${0} maxMonth=${11}/>
+          <${CalGrid} cells=${cells} month=${month} dayEvents=${dayParques} accentColor=${"#22C55E"} dotShape="square"
+            onDayClick=${day=>{const evs=dayParques(day);if(evs.length)setSelected({evs,day,tipo:"parques"});}}/>
+          <div style=${{padding:"8px 16px 24px"}}>
+            ${(()=>{
+              const mEvs=parquesList.filter(ev=>ev.parsed.m===month);
+              if(!mEvs.length)return html`<div style=${{textAlign:"center",padding:40,color:C.textMuted}}><div style=${{fontSize:32,marginBottom:8}}>🛡️</div><p>Sin actividades con estos filtros</p></div>`;
+              let lastDay=-1;
+              return mEvs.map((ev,i)=>{
+                const isNew=ev.parsed.d!==lastDay;lastDay=ev.parsed.d;
+                const wd=new Date(YEAR,ev.parsed.m,ev.parsed.d).toLocaleDateString("es-CO",{weekday:"long"});
+                return html`<div key=${i}>
+                  ${isNew&&html`<div style=${{display:"flex",alignItems:"center",gap:8,padding:"12px 0 6px",borderBottom:"1px solid "+C.border,marginBottom:6}}>
+                    <div style=${{fontSize:20,fontWeight:800,color:"#22C55E",fontFamily:"'JetBrains Mono'"}}>${ev.parsed.d}</div>
+                    <div><div style=${{fontSize:12,fontWeight:700,color:C.text,textTransform:"capitalize"}}>${wd}</div><div style=${{fontSize:10,color:C.textMuted}}>${MFULL[ev.parsed.m]} 2026</div></div>
+                  </div>`}
+                  <${ParquesCard} ev=${ev}/>
+                </div>`;
+              });
+            })()}
+          </div>
+        </div>`}
+
+      <!-- ═══════ TAB: TALLERES ═══════ -->
+      ${tab==="talleres"&&html`
+        <div class="fade-up">
+          <div style=${{margin:"12px 16px 0",borderRadius:14,background:"linear-gradient(135deg,rgba(99,102,241,0.1),rgba(236,72,153,0.05))",border:"1px solid rgba(99,102,241,0.25)",padding:"14px 16px"}}>
+            <div style=${{display:"flex",alignItems:"center",gap:10}}>
+              <span style=${{fontSize:28}}>🎓</span>
+              <div>
+                <div style=${{fontSize:15,fontWeight:800,color:"#818CF8"}}>Talleres de Innovación OAL</div>
+                <div style=${{fontSize:11,color:C.textMuted}}>2 grupos · 2 sesiones · Mayo ${YEAR}</div>
+              </div>
+              <div style=${{marginLeft:"auto",textAlign:"right"}}>
+                <div style=${{fontSize:16,fontWeight:800,color:"#818CF8",fontFamily:"'JetBrains Mono'"}}>${TALLERES.length}</div>
+                <div style=${{fontSize:10,color:C.textMuted}}>talleres</div>
+              </div>
+            </div>
+          </div>
+          <div style=${{padding:"10px 16px 0",display:"flex",gap:10,alignItems:"center"}}>
+            ${[1,2].map(g=>{
+              const clr=TALLER_CLR[g];
+              return html`<div key=${g} style=${{display:"flex",alignItems:"center",gap:5}}><div style=${{width:10,height:10,borderRadius:3,background:clr.bg}}/><span style=${{fontSize:11,color:C.textMuted,fontWeight:600}}>Grupo ${g}</span></div>`;
+            })}
+          </div>
+          <${MonthNav} month=${month} setMonth=${setMonth} minMonth=${0} maxMonth=${11}/>
+          <${CalGrid} cells=${cells} month=${month} dayEvents=${dayTalleres} accentColor=${"#6366F1"} dotShape="square"
+            onDayClick=${day=>{const evs=dayTalleres(day);if(evs.length)setSelected({evs,day,tipo:"talleres"});}}/>
+          <div style=${{padding:"8px 16px 24px"}}>
+            ${talleresList.length===0
+              ?html`<div style=${{textAlign:"center",padding:40,color:C.textMuted}}><div style=${{fontSize:32,marginBottom:8}}>🎓</div><p>Sin talleres</p></div>`
+              :talleresList.map((ev,i)=>{
+                const clr=TALLER_CLR[ev.grupo]||{bg:"#6366F1"};
+                const wd=new Date(YEAR,ev.parsed.m,ev.parsed.d).toLocaleDateString("es-CO",{weekday:"long"});
+                return html`<div key=${i}>
+                  <div style=${{display:"flex",alignItems:"center",gap:8,padding:"12px 0 6px",borderBottom:"1px solid "+C.border,marginBottom:6}}>
+                    <div style=${{fontSize:20,fontWeight:800,color:clr.bg,fontFamily:"'JetBrains Mono'"}}>${ev.parsed.d}</div>
+                    <div><div style=${{fontSize:12,fontWeight:700,color:C.text,textTransform:"capitalize"}}>${wd}</div><div style=${{fontSize:10,color:C.textMuted}}>${MFULL[ev.parsed.m]} 2026</div></div>
+                  </div>
+                  <${TallerCard} ev=${ev}/>
+                </div>`;
+              })}
+          </div>
+        </div>`}
+
+      <!-- ═══════ TAB: RETOS ═══════ -->
+      ${tab==="retos"&&html`
+        <div class="fade-up">
+          <div style=${{margin:"12px 16px 0",borderRadius:14,background:"linear-gradient(135deg,rgba(16,185,129,0.1),rgba(99,102,241,0.05))",border:"1px solid rgba(16,185,129,0.25)",padding:"14px 16px"}}>
+            <div style=${{display:"flex",alignItems:"center",gap:10}}>
+              <span style=${{fontSize:28}}>🏆</span>
+              <div>
+                <div style=${{fontSize:15,fontWeight:800,color:"#10B981"}}>Retos TEAM IDRD 2026</div>
+                <div style=${{fontSize:11,color:C.textMuted}}>Seguimiento por localidad · actualizado cada 6h</div>
+              </div>
+              <div style=${{marginLeft:"auto",textAlign:"right"}}>
+                <div style=${{fontSize:16,fontWeight:800,color:"#10B981",fontFamily:"'JetBrains Mono'"}}>${retosEvents.length}</div>
+                <div style=${{fontSize:10,color:C.textMuted}}>eventos</div>
+              </div>
+            </div>
+          </div>
+          <div style=${{margin:"8px 16px 0",padding:"8px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border,display:"flex",alignItems:"center",gap:8}}>
+            ${retosSource==="loading"&&html`<span style=${{fontSize:12,animation:"spin 1s linear infinite",display:"inline-block"}}>↻</span><span style=${{fontSize:12,color:C.textMuted}}>Cargando desde GitHub…</span>`}
+            ${retosSource==="ok"&&html`
+              <div style=${{width:7,height:7,borderRadius:"50%",background:"#22C55E"}}/>
+              <span style=${{fontSize:12,color:C.textMuted,flex:1}}>Datos actualizados · Power Automate cada 6h</span>
+              <button onClick=${()=>{setRetosSource("idle");setRetosEvents([]);}} style=${{fontSize:10,padding:"3px 8px",borderRadius:6,border:"1px solid "+C.border,background:C.bg,color:C.textMuted,cursor:"pointer"}}>↻</button>`}
+            ${retosSource==="error"&&html`
+              <div style=${{width:7,height:7,borderRadius:"50%",background:"#EF4444"}}/>
+              <span style=${{fontSize:12,color:"#EF4444",flex:1}}>No se pudo cargar el CSV</span>
+              <button onClick=${()=>setRetosSource("idle")} style=${{fontSize:10,padding:"3px 8px",borderRadius:6,border:"1px solid "+C.border,background:C.bg,color:C.textMuted,cursor:"pointer"}}>Reintentar</button>`}
+            ${retosSource==="idle"&&html`<span style=${{fontSize:12,color:C.textMuted}}>Iniciando…</span>`}
+          </div>
+          ${retosEvents.length>0&&html`
+            <div style=${{padding:"10px 16px 0",display:"flex",gap:5,flexWrap:"wrap"}}>
+              <button class="chip" onClick=${()=>setFilterReto("ALL")} style=${{padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,background:filterReto==="ALL"?"#10B981":C.surface,color:filterReto==="ALL"?"#fff":C.textMuted}}>TODOS</button>
+              ${["RETO 1","RETO 2","RETO 3","RETO 4"].map(r=>{
+                const clr=RETO_CLR[r]||{bg:"#6B7280"};
+                const cnt=retosEvents.filter(e=>e.reto===r).length;
+                if(!cnt)return null;
+                return html`<button key=${r} class="chip" onClick=${()=>setFilterReto(filterReto===r?"ALL":r)}
+                  style=${{padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,background:filterReto===r?clr.bg:C.surface,color:filterReto===r?"#fff":C.textMuted}}>🏆 ${r} (${cnt})</button>`;
+              })}
+            </div>`}
+          ${retosEvents.length>0&&(()=>{
+            const filtrados=retosEvents.filter(e=>filterReto==="ALL"||e.reto===filterReto);
+            const ejecutados=filtrados.filter(e=>e.ejecutado).length;
+            const pendientes=filtrados.length-ejecutados;
+            return html`
+              <div style=${{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,margin:"10px 16px 0"}}>
+                ${[{label:"Total",val:filtrados.length,clr:"#10B981"},{label:"Ejecutados",val:ejecutados,clr:"#22C55E"},{label:"Pendientes",val:pendientes,clr:"#FBBF24"}].map(s=>html`
+                  <div key=${s.label} style=${{background:C.surface,borderRadius:10,padding:"10px 8px",textAlign:"center",border:"1px solid "+C.border}}>
+                    <div style=${{fontSize:20,fontWeight:800,color:s.clr,fontFamily:"'JetBrains Mono'"}}>${s.val}</div>
+                    <div style=${{fontSize:9,color:C.textMuted,fontWeight:700,letterSpacing:"0.5px",marginTop:1}}>${s.label.toUpperCase()}</div>
+                  </div>`)}
+              </div>`;
+          })()}
+          <div style=${{padding:"12px 16px 24px"}}>
+            ${retosEvents.length===0&&retosSource==="ok"&&html`<div style=${{textAlign:"center",padding:40,color:C.textMuted}}><div style=${{fontSize:32,marginBottom:8}}>🔍</div><p>Sin eventos registrados</p></div>`}
+            ${(()=>{
+              const filtrados=retosEvents.filter(e=>filterReto==="ALL"||e.reto===filterReto).sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:a.parsed.d-b.parsed.d);
+              let lastM=-1;
+              return filtrados.map((ev,i)=>{
+                const isNewM=ev.parsed.m!==lastM;lastM=ev.parsed.m;
+                const wd=new Date(YEAR,ev.parsed.m,ev.parsed.d).toLocaleDateString("es-CO",{weekday:"long"});
+                return html`<div key=${i}>
+                  ${isNewM&&html`<div style=${{fontSize:13,fontWeight:800,color:"#10B981",padding:"14px 0 8px",borderBottom:"1px solid "+C.border,marginBottom:8,letterSpacing:"-0.3px"}}>${MFULL[ev.parsed.m]} ${YEAR}</div>`}
+                  <div style=${{display:"flex",alignItems:"center",gap:6,marginBottom:2}}>
+                    <span style=${{fontSize:11,color:C.textDim,fontFamily:"'JetBrains Mono'",minWidth:20,textAlign:"right"}}>${ev.parsed.d}</span>
+                    <span style=${{fontSize:10,color:C.textDim,textTransform:"capitalize"}}>${wd.split(",")[0]}</span>
+                  </div>
+                  <${RetoCard} ev=${ev} expanded=${true}/>
+                </div>`;
+              });
+            })()}
+          </div>
+        </div>`}
+
+      <!-- ═══════ MODAL ═══════ -->
+      ${selected&&html`
+        <div onClick=${()=>setSelected(null)}
+          style=${{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",zIndex:100,display:"flex",alignItems:"flex-end",justifyContent:"center",backdropFilter:"blur(6px)"}}>
+          <div onClick=${e=>e.stopPropagation()}
+            style=${{background:C.surface,borderRadius:"20px 20px 0 0",padding:"16px 16px 32px",width:"100%",maxWidth:480,maxHeight:"78vh",overflowY:"auto",border:"1px solid "+C.border,borderBottom:"none",animation:"slideUp 0.3s ease"}}>
+            <div style=${{width:36,height:4,borderRadius:2,background:C.border,margin:"0 auto 14px"}}/>
+            <h3 style=${{fontSize:16,fontWeight:800,marginBottom:12,letterSpacing:"-0.3px"}}>
+              ${selected.day} de ${MFULL[month]}
+              ${selected.tipo==="combined"&&selected.recreo?.length>0&&selected.mundial?.length>0&&html`<span style=${{marginLeft:8,padding:"2px 8px",borderRadius:8,background:"rgba(239,68,68,0.1)",color:"#EF4444",fontSize:11}}>⚠️ Cruce</span>`}
+            </h3>
+            ${selected.tipo==="recreo"&&selected.evs?.map((ev,i)=>html`<${EventCard} key=${i} ev=${ev} expanded=${true}/>`)}
+            ${selected.tipo==="mundial"&&selected.evs?.map((ev,i)=>html`<${MundialCard} key=${i} ev=${ev}/>`)}
+            ${selected.tipo==="parques"&&selected.evs?.map((ev,i)=>html`<${ParquesCard} key=${i} ev=${ev}/>`)}
+            ${selected.tipo==="talleres"&&selected.evs?.map((ev,i)=>html`<${TallerCard} key=${i} ev=${ev}/>`)}
+            ${selected.tipo==="combined"&&html`
+              ${selected.recreo?.length>0&&html`<div style=${{fontSize:11,color:C.accent,fontWeight:700,marginBottom:6,letterSpacing:"0.5px"}}>📅 RECREOLAB</div>${selected.recreo.map((ev,i)=>html`<${EventCard} key=${i} ev=${ev} expanded=${true}/>`)}`}
+              ${selected.mundial?.length>0&&html`<div style=${{fontSize:11,color:C.mundial,fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>⚽ MUNDIAL 2026</div>${selected.mundial.map((ev,i)=>html`<${MundialCard} key=${i} ev=${ev}/>`)}`}
+              ${selected.parques?.length>0&&html`<div style=${{fontSize:11,color:"#22C55E",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🛡️ PARQUES</div>${selected.parques.map((ev,i)=>html`<${ParquesCard} key=${i} ev=${ev}/>`)}`}
+              ${selected.talleres?.length>0&&html`<div style=${{fontSize:11,color:"#6366F1",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🎓 TALLERES</div>${selected.talleres.map((ev,i)=>html`<${TallerCard} key=${i} ev=${ev}/>`)}`}
+              ${selected.retos?.length>0&&html`<div style=${{fontSize:11,color:"#10B981",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🏆 RETOS</div>${selected.retos.map((ev,i)=>html`<${RetoCard} key=${i} ev=${ev} expanded=${true}/>`)}`}`}
+            <button onClick=${()=>setSelected(null)}
+              style=${{width:"100%",padding:12,borderRadius:12,border:"none",background:C.bg,color:C.text,fontSize:13,fontWeight:700,cursor:"pointer",marginTop:8}}>Cerrar</button>
+          </div>
+        </div>`}
+
+      <div style=${{padding:"8px 20px 20px",textAlign:"center"}}>
+        <p style=${{fontSize:10,color:C.textDim}}>${events.length} Recreolab · ${MUNDIAL.length} Mundial · ${PARQUES_SEG.length} Parques · ${TALLERES.length} Talleres · ${retosEvents.length} Retos · ${source==="live"?"Google Sheets (en vivo)":source==="csv"?"CSV":"datos embebidos"}</p>
+      </div>
+    </div>`;
+}
+
+ReactDOM.createRoot(document.getElementById("app")).render(React.createElement(App));
+  </script>
+</body>
+</html>
