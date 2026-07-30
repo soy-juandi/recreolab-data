@@ -124,6 +124,38 @@ async function fetchTalleres() {
   } catch(e) { return null; }
 }
 
+// modulo,moduloNombre,tema,fecha,tipo,hora,lugar (fecha ISO, hora ya formateada por el Office Script)
+async function fetchFortalecimiento() {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(FORTALECIMIENTO_CSV_URL + "?t=" + Date.now(), { signal: controller.signal });
+    clearTimeout(timeout);
+    if (!res.ok) return null;
+    const text = await res.text();
+    if (!text || text.length < 20) return null;
+    const lines = parseCSV(text);
+    if (lines.length < 2) return null;
+    const events = [];
+    for (let r = 1; r < lines.length; r++) {
+      const row = lines[r];
+      const tema = sanitize(row[2]?.trim() || "");
+      if (!tema) continue;
+      events.push({
+        modulo: parseInt(row[0]) || 0,
+        moduloNombre: sanitize(row[1]?.trim() || ""),
+        tema,
+        fecha: sanitize(row[3]?.trim() || ""),
+        tipo: sanitize(row[4]?.trim() || ""),
+        hora: sanitize(row[5]?.trim() || ""),
+        lugar: sanitize(row[6]?.trim() || ""),
+      });
+    }
+    if (events.length === 0) return null;
+    return events;
+  } catch(e) { return null; }
+}
+
 function parseCSV(text) {
   const rows=[], lines=[];
   let current="", inQuotes=false;
@@ -397,6 +429,33 @@ const RETO_CLR = {
   "RETO 4":{bg:"#10B981",glow:"rgba(16,185,129,0.25)"},
 };
 
+// ── FORTALECIMIENTO ───────────────────────────────────────────
+// Contrato CSV (Office Script): modulo,moduloNombre,tema,fecha,tipo,hora,lugar
+// fecha en ISO (parseDate ya lo soporta), hora/lugar ya formateados por el Office Script
+const FORTALECIMIENTO_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/fortalecimiento.csv";
+
+// Red de seguridad si FORTALECIMIENTO_CSV_URL falla o no hay conexión
+const FORTALECIMIENTO_FALLBACK = [
+  {modulo:3, moduloNombre:"Comunicar para conectar", tema:"Gestión de la imagen y mensajes en redes sociales", fecha:"2026-07-29", tipo:"Virtual", hora:"5:00 PM – 7:00 PM", lugar:""},
+  {modulo:3, moduloNombre:"Comunicar para conectar", tema:"Gestión de la imagen y mensajes en redes sociales", fecha:"2026-08-05", tipo:"Virtual", hora:"5:00 PM – 6:00 PM", lugar:""},
+  {modulo:3, moduloNombre:"Comunicar para conectar", tema:"Conectando con las Audiencias", fecha:"2026-08-12", tipo:"Virtual", hora:"5:00 PM – 7:00 PM", lugar:""},
+  {modulo:3, moduloNombre:"Comunicar para conectar", tema:"Conectando con las Audiencias", fecha:"2026-08-19", tipo:"Virtual", hora:"5:00 PM – 6:00 PM", lugar:""},
+  {modulo:3, moduloNombre:"Comunicar para conectar", tema:"Herramientas para Contar Historias", fecha:"2026-08-20", tipo:"Presencial", hora:"3:00 PM – 6:00 PM", lugar:"Sede principal IDRD- Sala B, Calle 63 # 59A - 06"},
+  {modulo:4, moduloNombre:"Veeduría en acción", tema:"Veeduría en acción", fecha:"2026-08-26", tipo:"Virtual", hora:"5:00 PM – 7:00 PM", lugar:""},
+  {modulo:4, moduloNombre:"Veeduría en acción", tema:"Veeduría en acción", fecha:"2026-09-02", tipo:"Virtual", hora:"5:00 PM – 6:00 PM", lugar:""},
+  {modulo:5, moduloNombre:"Proyectos para Transformar", tema:"Marco lógico y pensamiento sistémico", fecha:"2026-09-09", tipo:"Virtual", hora:"5:00 PM – 7:00 PM", lugar:""},
+  {modulo:5, moduloNombre:"Proyectos para Transformar", tema:"Marco lógico y pensamiento sistémico", fecha:"2026-09-16", tipo:"Virtual", hora:"5:00 PM – 6:00 PM", lugar:""},
+  {modulo:6, moduloNombre:"Innovación y creatividad", tema:"Encontrando el Verdadero Reto", fecha:"2026-09-23", tipo:"Virtual", hora:"5:00 PM – 7:00 PM", lugar:""},
+  {modulo:6, moduloNombre:"Innovación y creatividad", tema:"Encontrando el Verdadero Reto", fecha:"2026-09-30", tipo:"Virtual", hora:"5:00 PM – 6:00 PM", lugar:""},
+  {modulo:6, moduloNombre:"Innovación y creatividad", tema:"Del reto a la transformación", fecha:"2026-10-01", tipo:"Presencial", hora:"3:00 PM – 6:00 PM", lugar:"Sede principal IDRD- Sala B, Calle 63 # 59A - 06"},
+  {modulo:7, moduloNombre:"Empatía colectiva para el trabajo en equipo", tema:"Empatia, liderazgo y adaptabilidad", fecha:"2026-10-07", tipo:"Presencial", hora:"3:00 PM – 6:00 PM", lugar:"Sede principal IDRD- Sala B, Calle 63 # 59A - 06"},
+];
+
+const FORTALECIMIENTO_CLR = {
+  "Virtual":    {bg:"#22C55E", glow:"rgba(34,197,94,0.2)"},
+  "Presencial": {bg:"#F97316", glow:"rgba(249,115,22,0.2)"},
+};
+
 // ── MUNDIAL 2026 ──────────────────────────────────────────────
 const MUNDIAL = [
   {fase:"grupos",dia:11,mes:5,hora:"2:00 PM",local:"México",vis:"Sudáfrica",grupo:"A",estadio:"Ciudad de México",col:false},
@@ -558,6 +617,7 @@ function parseDate(s){
 function enrichEvents(evs){return evs.map(e=>({...e,parsed:parseDate(e.fecha)})).filter(e=>e.parsed);}
 function enrichParques(evs){return evs.map(e=>({...e,parsed:parseDate(e.fecha)})).filter(e=>e.parsed);}
 function enrichTalleres(evs){return evs.map(e=>({...e,parsed:parseDate(e.fecha)})).filter(e=>e.parsed);}
+function enrichFortalecimiento(evs){return evs.map(e=>({...e,parsed:parseDate(e.fecha)})).filter(e=>e.parsed);}
 
 // ── TOKENS ────────────────────────────────────────────────────
 const C={bg:"#0B0E14",surface:"#131720",border:"#1E2433",text:"#E2E8F0",textMuted:"#64748B",textDim:"#475569",accent:"#F97316",accentGlow:"rgba(249,115,22,0.15)",mundial:"#FBBF24"};
@@ -654,6 +714,24 @@ function TallerCard({ev}){
     </div>`;
 }
 
+function FortalecimientoCard({ev}){
+  const clr=FORTALECIMIENTO_CLR[ev.tipo]||{bg:"#6B7280",glow:"transparent"};
+  return html`
+    <div class="card-hover" style=${{background:C.bg,borderRadius:12,padding:"12px 14px",marginBottom:6,border:"1px solid "+C.border,borderLeft:"3px solid "+clr.bg}}>
+      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+        <div style=${{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:C.surface,color:C.text,fontSize:10,fontWeight:700,border:"1px solid "+C.border}}>🌱 Módulo ${ev.modulo}</span>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:clr.bg,color:"#fff",fontSize:10,fontWeight:800,boxShadow:"0 1px 4px "+clr.glow}}>${ev.tipo}</span>
+        </div>
+        <span style=${{fontSize:10,color:C.textDim,fontFamily:"'JetBrains Mono'"}}>${ev.hora}</span>
+      </div>
+      <div style=${{fontSize:10,color:C.textMuted,fontWeight:600,marginBottom:2}}>${ev.moduloNombre}</div>
+      <div style=${{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3}}>${ev.tema}</div>
+      ${ev.parsed&&html`<div style=${{marginTop:4,fontSize:11,color:C.textDim,fontFamily:"'JetBrains Mono'"}}>${String(ev.parsed.d).padStart(2,"0")} ${MFULL[ev.parsed.m]}</div>`}
+      ${ev.tipo==="Presencial"&&ev.lugar&&html`<div style=${{marginTop:4,fontSize:11,color:C.textMuted}}>📍 ${ev.lugar}</div>`}
+    </div>`;
+}
+
 function RetoCard({ev,expanded=false}){
   const clr=RETO_CLR[ev.reto]||{bg:"#6B7280",glow:"transparent"};
   return html`
@@ -732,16 +810,19 @@ function App(){
   const [mundialFase,setMundialFase]=useState("ALL");
   const [soloCol,setSoloCol]=useState(false);
   const [filterParque,setFilterParque]=useState("ALL");
-  const [combineWith,setCombineWith]=useState({mundial:true,parques:true,talleres:true,retos:true});
+  const [combineWith,setCombineWith]=useState({mundial:true,parques:true,talleres:true,retos:true,fortalecimiento:true});
   const [debug,setDebug]=useState("");
   const [retosEvents,setRetosEvents]=useState([]);
   const [retosSource,setRetosSource]=useState("idle");
   const [filterReto,setFilterReto]=useState("ALL");
   const [talleres,setTalleres]=useState(TALLERES_FALLBACK);
   const [talleresSource,setTalleresSource]=useState("loading");
+  const [fortalecimiento,setFortalecimiento]=useState(FORTALECIMIENTO_FALLBACK);
+  const [fortalecimientoSource,setFortalecimientoSource]=useState("loading");
 
   const parquesEnriched=useMemo(()=>enrichParques(PARQUES_SEG),[]);
   const talleresEnriched=useMemo(()=>enrichTalleres(talleres),[talleres]);
+  const fortalecimientoEnriched=useMemo(()=>enrichFortalecimiento(fortalecimiento),[fortalecimiento]);
 
   const loadRecreoData=useCallback(async()=>{
     try{
@@ -765,11 +846,18 @@ function App(){
     else{setTalleres(TALLERES_FALLBACK);setTalleresSource("offline");}
   },[]);
 
+  const loadFortalecimientoData=useCallback(async()=>{
+    setFortalecimientoSource("loading");
+    const result=await fetchFortalecimiento();
+    if(result){setFortalecimiento(result);setFortalecimientoSource("live");}
+    else{setFortalecimiento(FORTALECIMIENTO_FALLBACK);setFortalecimientoSource("offline");}
+  },[]);
+
   const loadData=useCallback(async(sr)=>{
     if(sr)setRefreshing(true);
-    await Promise.all([loadRecreoData(),loadTalleresData()]);
+    await Promise.all([loadRecreoData(),loadTalleresData(),loadFortalecimientoData()]);
     if(sr)setRefreshing(false);
-  },[loadRecreoData,loadTalleresData]);
+  },[loadRecreoData,loadTalleresData,loadFortalecimientoData]);
 
   useEffect(()=>{loadData();},[loadData]);
 
@@ -790,6 +878,10 @@ function App(){
       const meses=talleresEnriched.filter(e=>e.parsed&&!e.parsed.monthOnly).map(e=>e.parsed.m);
       setMonth(meses.length?Math.min(...meses):4);
     }
+    else if(tab==="fortalecimiento"){
+      const meses=fortalecimientoEnriched.filter(e=>e.parsed&&!e.parsed.monthOnly).map(e=>e.parsed.m);
+      setMonth(meses.length?Math.min(...meses):6);
+    }
     else if(tab==="combined")setMonth(m=>m<2?4:m);
   },[tab]);
 
@@ -803,12 +895,14 @@ function App(){
   const dayParques=useCallback((d)=>parquesFiltered.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[parquesFiltered,month]);
   const dayTalleres=useCallback((d)=>talleresEnriched.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[talleresEnriched,month]);
   const dayRetos=useCallback((d)=>retosEvents.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[retosEvents,month]);
+  const dayFortalecimiento=useCallback((d)=>fortalecimientoEnriched.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[fortalecimientoEnriched,month]);
 
   const monthOnlyEvents=useMemo(()=>filtered.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.monthOnly),[filtered,month]);
   const listEvents=useMemo(()=>[...filtered].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:!a.parsed.d?1:!b.parsed.d?-1:a.parsed.d-b.parsed.d),[filtered]);
   const mundialList=useMemo(()=>[...mundialFiltered].sort((a,b)=>a.mes!==b.mes?a.mes-b.mes:a.dia-b.dia),[mundialFiltered]);
   const parquesList=useMemo(()=>[...parquesFiltered].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:a.parsed.d-b.parsed.d),[parquesFiltered]);
   const talleresList=useMemo(()=>[...talleresEnriched].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:a.parsed.d-b.parsed.d),[talleresEnriched]);
+  const fortalecimientoList=useMemo(()=>[...fortalecimientoEnriched].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:a.parsed.d-b.parsed.d),[fortalecimientoEnriched]);
 
   const minMonth=tab==="mundial"?5:0;
   const maxMonth=tab==="mundial"?6:11;
@@ -832,7 +926,11 @@ function App(){
     {k:"parques",icon:"🛡️",label:"Parques",clr:"#22C55E",bg:"rgba(34,197,94,0.12)"},
     {k:"talleres",icon:"🎓",label:"Talleres",clr:"#818CF8",bg:"rgba(99,102,241,0.12)"},
     {k:"retos",icon:"🏆",label:"Retos",clr:"#10B981",bg:"rgba(16,185,129,0.12)"},
+    {k:"fortalecimiento",icon:"🌱",label:"DRAFE",clr:"#A855F7",bg:"rgba(168,85,247,0.12)"},
   ];
+  const splitIndex=Math.ceil(TABS.length/2);
+  const filaSuperior=TABS.slice(0,splitIndex);
+  const filaInferior=TABS.slice(splitIndex);
 
   return html`
     <div style=${{fontFamily:"'DM Sans',system-ui,sans-serif",background:C.bg,color:C.text,minHeight:"100vh",maxWidth:480,margin:"0 auto"}}>
@@ -864,7 +962,7 @@ function App(){
           </div>
         </div>
         <div style=${{display:"flex",flexDirection:"column",gap:2,marginTop:14}}>
-          ${[[TABS[0],TABS[1],TABS[2]],[TABS[3],TABS[4],TABS[5]]].map((row,ri)=>html`
+          ${[filaSuperior,filaInferior].map((row,ri)=>html`
             <div key=${ri} style=${{display:"flex",gap:2,background:C.bg,borderRadius:ri===0?"12px 12px 4px 4px":"4px 4px 12px 12px",padding:3}}>
               ${row.map(t=>html`
                 <button key=${t.k} onClick=${()=>setTab(t.k)}
@@ -1016,7 +1114,7 @@ function App(){
           <div style=${{margin:"12px 16px 0",padding:"14px",borderRadius:12,background:C.surface,border:"1px solid "+C.border}}>
             <div style=${{fontSize:11,fontWeight:700,color:"#818CF8",marginBottom:10,letterSpacing:"0.5px"}}>🔀 VISTA COMBINADA — Cruces con Recreolab</div>
             <div style=${{display:"flex",gap:6,flexWrap:"wrap"}}>
-              ${[{k:"mundial",label:"⚽ Mundial",clr:C.mundial},{k:"parques",label:"🛡️ Parques",clr:"#22C55E"},{k:"talleres",label:"🎓 Talleres",clr:"#6366F1"},{k:"retos",label:"🏆 Retos",clr:"#10B981"}].map(({k,label,clr})=>html`
+              ${[{k:"mundial",label:"⚽ Mundial",clr:C.mundial},{k:"parques",label:"🛡️ Parques",clr:"#22C55E"},{k:"talleres",label:"🎓 Talleres",clr:"#6366F1"},{k:"retos",label:"🏆 Retos",clr:"#10B981"},{k:"fortalecimiento",label:"🌱 Fortalecimiento",clr:"#A855F7"}].map(({k,label,clr})=>html`
                 <button key=${k} onClick=${()=>setCombineWith(p=>({...p,[k]:!p[k]}))}
                   style=${{padding:"6px 12px",borderRadius:20,border:"2px solid "+(combineWith[k]?clr:C.border),background:combineWith[k]?clr+"18":"transparent",color:combineWith[k]?clr:C.textMuted,fontSize:11,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}}>
                   ${label} ${combineWith[k]?"✓":""}
@@ -1028,6 +1126,7 @@ function App(){
               ${combineWith.parques&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:"#22C55E"}}/><span style=${{fontSize:10,color:C.textMuted}}>Parques</span></div>`}
               ${combineWith.talleres&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:"#6366F1"}}/><span style=${{fontSize:10,color:C.textMuted}}>Talleres</span></div>`}
               ${combineWith.retos&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:"#10B981"}}/><span style=${{fontSize:10,color:C.textMuted}}>Retos</span></div>`}
+              ${combineWith.fortalecimiento&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:"#A855F7"}}/><span style=${{fontSize:10,color:C.textMuted}}>Fortalecimiento</span></div>`}
               <div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:3,background:"rgba(239,68,68,0.3)",border:"2px solid #EF4444"}}/><span style=${{fontSize:10,color:"#EF4444",fontWeight:700}}>⚠️ Cruce</span></div>
             </div>
           </div>
@@ -1044,11 +1143,12 @@ function App(){
                 const pEvs=combineWith.parques?dayParques(day):[];
                 const tEvs=combineWith.talleres?dayTalleres(day):[];
                 const reEvs=combineWith.retos?dayRetos(day):[];
-                const hasR=rEvs.length>0,hasOther=mEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0;
+                const fEvs=combineWith.fortalecimiento?dayFortalecimiento(day):[];
+                const hasR=rEvs.length>0,hasOther=mEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0||fEvs.length>0;
                 const hasAny=hasR||hasOther,isConflict=hasR&&hasOther;
                 const today=new Date(),isToday=today.getDate()===day&&today.getMonth()===month&&today.getFullYear()===YEAR;
                 return html`
-                  <div key=${day} onClick=${()=>{if(hasAny)setSelected({recreo:rEvs,mundial:mEvs,parques:pEvs,talleres:tEvs,retos:reEvs,day,tipo:"combined"});}}
+                  <div key=${day} onClick=${()=>{if(hasAny)setSelected({recreo:rEvs,mundial:mEvs,parques:pEvs,talleres:tEvs,retos:reEvs,fortalecimiento:fEvs,day,tipo:"combined"});}}
                     style=${{minHeight:52,borderRadius:10,background:isConflict?"rgba(239,68,68,0.06)":hasAny?C.surface:"transparent",border:isConflict?"2px solid rgba(239,68,68,0.4)":isToday?"2px solid "+C.accent:hasAny?"1px solid "+C.border:"1px solid transparent",padding:4,cursor:hasAny?"pointer":"default",transition:"all 0.15s"}}>
                     <div style=${{fontSize:12,fontWeight:isToday?800:hasAny?600:400,color:isConflict?"#EF4444":isToday?C.accent:hasAny?C.text:C.textDim,textAlign:"center",marginBottom:2,fontFamily:"'JetBrains Mono'"}}>${day}</div>
                     ${isConflict&&html`<div style=${{fontSize:7,textAlign:"center",marginBottom:1}}>⚠️</div>`}
@@ -1058,6 +1158,7 @@ function App(){
                       ${pEvs.slice(0,1).map((_,j)=>html`<div key=${"p"+j} style=${{width:6,height:6,borderRadius:2,background:"#22C55E"}}/>`)}
                       ${tEvs.slice(0,1).map((_,j)=>html`<div key=${"t"+j} style=${{width:6,height:6,borderRadius:2,background:"#6366F1"}}/>`)}
                       ${reEvs.slice(0,1).map((_,j)=>html`<div key=${"re"+j} style=${{width:6,height:6,borderRadius:2,background:"#10B981"}}/>`)}
+                      ${fEvs.slice(0,1).map((_,j)=>html`<div key=${"f"+j} style=${{width:6,height:6,borderRadius:2,background:"#A855F7"}}/>`)}
                     </div>
                   </div>`;
               })}
@@ -1071,6 +1172,7 @@ function App(){
                 ...(combineWith.parques?parquesEnriched.filter(e=>e.parsed&&e.parsed.m===month&&!e.parsed.monthOnly).map(e=>e.parsed.d):[]),
                 ...(combineWith.talleres?talleresEnriched.filter(e=>e.parsed&&e.parsed.m===month&&!e.parsed.monthOnly).map(e=>e.parsed.d):[]),
                 ...(combineWith.retos?retosEvents.filter(e=>e.parsed&&e.parsed.m===month).map(e=>e.parsed.d):[]),
+                ...(combineWith.fortalecimiento?fortalecimientoEnriched.filter(e=>e.parsed&&e.parsed.m===month&&!e.parsed.monthOnly).map(e=>e.parsed.d):[]),
               ]);
               const sorted=[...daysSet].sort((a,b)=>a-b);
               if(!sorted.length)return html`<div style=${{textAlign:"center",padding:40,color:C.textMuted}}><div style=${{fontSize:32,marginBottom:8}}>📭</div><p>Sin eventos en ${MFULL[month]}</p></div>`;
@@ -1080,7 +1182,8 @@ function App(){
                 const pEvs=combineWith.parques?dayParques(day):[];
                 const tEvs=combineWith.talleres?dayTalleres(day):[];
                 const reEvs=combineWith.retos?dayRetos(day):[];
-                const isConflict=rEvs.length>0&&(mEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0);
+                const fEvs=combineWith.fortalecimiento?dayFortalecimiento(day):[];
+                const isConflict=rEvs.length>0&&(mEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0||fEvs.length>0);
                 const wd=new Date(YEAR,month,day).toLocaleDateString("es-CO",{weekday:"long"});
                 return html`<div key=${day} style=${{marginBottom:16}}>
                   <div style=${{display:"flex",alignItems:"center",gap:8,padding:"10px 0 6px",borderBottom:"1px solid "+(isConflict?"rgba(239,68,68,0.3)":C.border),marginBottom:6}}>
@@ -1093,6 +1196,7 @@ function App(){
                   ${pEvs.length>0&&html`<div style=${{fontSize:10,color:"#22C55E",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🛡️ PARQUES</div>${pEvs.map((ev,i)=>html`<${ParquesCard} key=${"p"+i} ev=${ev}/>`)}`}
                   ${tEvs.length>0&&html`<div style=${{fontSize:10,color:"#6366F1",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0||pEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🎓 TALLERES</div>${tEvs.map((ev,i)=>html`<${TallerCard} key=${"t"+i} ev=${ev}/>`)}`}
                   ${reEvs.length>0&&html`<div style=${{fontSize:10,color:"#10B981",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0||pEvs.length>0||tEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🏆 RETOS</div>${reEvs.map((ev,i)=>html`<${RetoCard} key=${"re"+i} ev=${ev} expanded=${true}/>`)}`}
+                  ${fEvs.length>0&&html`<div style=${{fontSize:10,color:"#A855F7",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🌱 FORTALECIMIENTO</div>${fEvs.map((ev,i)=>html`<${FortalecimientoCard} key=${"f"+i} ev=${ev}/>`)}`}
                 </div>`;
               });
             })()}
@@ -1204,6 +1308,57 @@ function App(){
           </div>
         </div>`}
 
+      <!-- ═══════ TAB: FORTALECIMIENTO ═══════ -->
+      ${tab==="fortalecimiento"&&html`
+        <div class="fade-up">
+          <div style=${{margin:"12px 16px 0",borderRadius:14,background:"linear-gradient(135deg,rgba(168,85,247,0.1),rgba(34,197,94,0.05))",border:"1px solid rgba(168,85,247,0.25)",padding:"14px 16px"}}>
+            <div style=${{display:"flex",alignItems:"center",gap:10}}>
+              <span style=${{fontSize:28}}>🌱</span>
+              <div>
+                <div style=${{fontSize:15,fontWeight:800,color:"#A855F7"}}>DRAFE</div>
+                <div style=${{fontSize:11,color:C.textMuted}}>Cronograma DRAFE ${YEAR}</div>
+              </div>
+              <div style=${{marginLeft:"auto",textAlign:"right"}}>
+                <div style=${{fontSize:16,fontWeight:800,color:"#A855F7",fontFamily:"'JetBrains Mono'"}}>${fortalecimientoEnriched.length}</div>
+                <div style=${{fontSize:10,color:C.textMuted}}>sesiones</div>
+              </div>
+            </div>
+          </div>
+          <div style=${{margin:"8px 16px 0",padding:"8px 12px",borderRadius:10,background:C.surface,border:"1px solid "+C.border,display:"flex",alignItems:"center",gap:8}}>
+            ${fortalecimientoSource==="loading"&&html`<span style=${{fontSize:12,animation:"spin 1s linear infinite",display:"inline-block"}}>↻</span><span style=${{fontSize:12,color:C.textMuted}}>Cargando desde GitHub…</span>`}
+            ${fortalecimientoSource==="live"&&html`
+              <div style=${{width:7,height:7,borderRadius:"50%",background:"#22C55E"}}/>
+              <span style=${{fontSize:12,color:C.textMuted,flex:1}}>EN VIVO · Excel Online vía Power Automate</span>`}
+            ${fortalecimientoSource==="offline"&&html`
+              <div style=${{width:7,height:7,borderRadius:"50%",background:"#EF4444"}}/>
+              <span style=${{fontSize:12,color:"#EF4444",flex:1}}>OFFLINE · mostrando datos embebidos</span>`}
+          </div>
+          <div style=${{padding:"10px 16px 0",display:"flex",gap:10,alignItems:"center"}}>
+            ${["Virtual","Presencial"].map(t=>{
+              const clr=FORTALECIMIENTO_CLR[t];
+              return html`<div key=${t} style=${{display:"flex",alignItems:"center",gap:5}}><div style=${{width:10,height:10,borderRadius:3,background:clr.bg}}/><span style=${{fontSize:11,color:C.textMuted,fontWeight:600}}>${t}</span></div>`;
+            })}
+          </div>
+          <${MonthNav} month=${month} setMonth=${setMonth} minMonth=${0} maxMonth=${11}/>
+          <${CalGrid} cells=${cells} month=${month} dayEvents=${dayFortalecimiento} accentColor=${"#A855F7"} dotShape="square"
+            onDayClick=${day=>{const evs=dayFortalecimiento(day);if(evs.length)setSelected({evs,day,tipo:"fortalecimiento"});}}/>
+          <div style=${{padding:"8px 16px 24px"}}>
+            ${fortalecimientoList.length===0
+              ?html`<div style=${{textAlign:"center",padding:40,color:C.textMuted}}><div style=${{fontSize:32,marginBottom:8}}>🌱</div><p>Sin sesiones</p></div>`
+              :fortalecimientoList.map((ev,i)=>{
+                const clr=FORTALECIMIENTO_CLR[ev.tipo]||{bg:"#A855F7"};
+                const wd=new Date(YEAR,ev.parsed.m,ev.parsed.d).toLocaleDateString("es-CO",{weekday:"long"});
+                return html`<div key=${i}>
+                  <div style=${{display:"flex",alignItems:"center",gap:8,padding:"12px 0 6px",borderBottom:"1px solid "+C.border,marginBottom:6}}>
+                    <div style=${{fontSize:20,fontWeight:800,color:clr.bg,fontFamily:"'JetBrains Mono'"}}>${ev.parsed.d}</div>
+                    <div><div style=${{fontSize:12,fontWeight:700,color:C.text,textTransform:"capitalize"}}>${wd}</div><div style=${{fontSize:10,color:C.textMuted}}>${MFULL[ev.parsed.m]} 2026</div></div>
+                  </div>
+                  <${FortalecimientoCard} ev=${ev}/>
+                </div>`;
+              })}
+          </div>
+        </div>`}
+
       <!-- ═══════ TAB: RETOS ═══════ -->
       ${tab==="retos"&&html`
         <div class="fade-up">
@@ -1292,19 +1447,21 @@ function App(){
             ${selected.tipo==="mundial"&&selected.evs?.map((ev,i)=>html`<${MundialCard} key=${i} ev=${ev}/>`)}
             ${selected.tipo==="parques"&&selected.evs?.map((ev,i)=>html`<${ParquesCard} key=${i} ev=${ev}/>`)}
             ${selected.tipo==="talleres"&&selected.evs?.map((ev,i)=>html`<${TallerCard} key=${i} ev=${ev}/>`)}
+            ${selected.tipo==="fortalecimiento"&&selected.evs?.map((ev,i)=>html`<${FortalecimientoCard} key=${i} ev=${ev}/>`)}
             ${selected.tipo==="combined"&&html`
               ${selected.recreo?.length>0&&html`<div style=${{fontSize:11,color:C.accent,fontWeight:700,marginBottom:6,letterSpacing:"0.5px"}}>📅 RECREOLAB</div>${selected.recreo.map((ev,i)=>html`<${EventCard} key=${i} ev=${ev} expanded=${true}/>`)}`}
               ${selected.mundial?.length>0&&html`<div style=${{fontSize:11,color:C.mundial,fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>⚽ MUNDIAL 2026</div>${selected.mundial.map((ev,i)=>html`<${MundialCard} key=${i} ev=${ev}/>`)}`}
               ${selected.parques?.length>0&&html`<div style=${{fontSize:11,color:"#22C55E",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🛡️ PARQUES</div>${selected.parques.map((ev,i)=>html`<${ParquesCard} key=${i} ev=${ev}/>`)}`}
               ${selected.talleres?.length>0&&html`<div style=${{fontSize:11,color:"#6366F1",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🎓 TALLERES</div>${selected.talleres.map((ev,i)=>html`<${TallerCard} key=${i} ev=${ev}/>`)}`}
-              ${selected.retos?.length>0&&html`<div style=${{fontSize:11,color:"#10B981",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🏆 RETOS</div>${selected.retos.map((ev,i)=>html`<${RetoCard} key=${i} ev=${ev} expanded=${true}/>`)}`}`}
+              ${selected.retos?.length>0&&html`<div style=${{fontSize:11,color:"#10B981",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🏆 RETOS</div>${selected.retos.map((ev,i)=>html`<${RetoCard} key=${i} ev=${ev} expanded=${true}/>`)}`}
+              ${selected.fortalecimiento?.length>0&&html`<div style=${{fontSize:11,color:"#A855F7",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🌱 FORTALECIMIENTO</div>${selected.fortalecimiento.map((ev,i)=>html`<${FortalecimientoCard} key=${i} ev=${ev}/>`)}`}`}
             <button onClick=${()=>setSelected(null)}
               style=${{width:"100%",padding:12,borderRadius:12,border:"none",background:C.bg,color:C.text,fontSize:13,fontWeight:700,cursor:"pointer",marginTop:8}}>Cerrar</button>
           </div>
         </div>`}
 
       <div style=${{padding:"8px 20px 20px",textAlign:"center"}}>
-        <p style=${{fontSize:10,color:C.textDim}}>${events.length} Recreolab · ${MUNDIAL.length} Mundial · ${PARQUES_SEG.length} Parques · ${talleresEnriched.length} Talleres${talleresSource==="live"?" (en vivo)":talleresSource==="offline"?" (offline)":""} · ${retosEvents.length} Retos · ${source==="live"?"Google Sheets (en vivo)":source==="csv"?"CSV":"datos embebidos"}</p>
+        <p style=${{fontSize:10,color:C.textDim}}>${events.length} Recreolab · ${MUNDIAL.length} Mundial · ${PARQUES_SEG.length} Parques · ${talleresEnriched.length} Talleres${talleresSource==="live"?" (en vivo)":talleresSource==="offline"?" (offline)":""} · ${retosEvents.length} Retos · ${fortalecimientoEnriched.length} Fortalecimiento${fortalecimientoSource==="live"?" (en vivo)":fortalecimientoSource==="offline"?" (offline)":""} · ${source==="live"?"Google Sheets (en vivo)":source==="csv"?"CSV":"datos embebidos"}</p>
       </div>
     </div>`;
 }
