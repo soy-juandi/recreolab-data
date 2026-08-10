@@ -46,6 +46,12 @@ const SHEET_ID   = "1dRjF-db6TXdQZx44Snl6hJs1nsHIzaLz5gh-g8YiqUo";
 const SHEET_NAME = "Cronograma general";
 const YEAR       = 2026;
 const RETOS_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/retos_idrd.csv";
+// Migración SharePoint (MIGRACION_RECREOLAB_SHAREPOINT.md) — formato tidy (una fila
+// por evento), header ID_Registro,Localidad,Nombre_Iniciativa_o_Evento,Fecha_Programada,
+// Hora_Programada,Barrio,Dirección,Lugar_Especifico. Publicado por
+// office-script-recreolab-matriz.ts vía Power Automate. Mientras el flow no exista o
+// falle, fetchCSV() cae a Google Sheets (fallback, ver más abajo) sin que nadie lo note.
+const RECREOLAB_MATRIZ_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/recreolab_matriz.csv";
 // Contrato CSV (publicado por office-script-talleres.ts vía Power Automate):
 // taller,fecha,hora,lugar,participantes,grupo,sesion — fecha en dd-mm-yyyy
 const TALLERES_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/talleres_oal.csv";
@@ -61,6 +67,7 @@ function sanitize(val) {
 // ── DATA FETCHING ─────────────────────────────────────────────
 async function fetchCSV() {
   const urls = [
+    { source:"live-sharepoint", url: RECREOLAB_MATRIZ_CSV_URL + "?t=" + Date.now() },
     { source:"live", url:`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}` },
     { source:"csv",  url:`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0` },
   ];
@@ -208,6 +215,101 @@ function csvToEvents(lines) {
     if (row[16]?.trim()) events.push({...lastCtx, tipo:"ENTRENALAB", sesiones:parseInt(row[11])||2, barrio:sanitize(row[13]?.trim()||""), direccion:sanitize(row[15]?.trim()||""), lugar:sanitize(row[14]?.trim()||""), fecha:sanitize(row[16]?.trim()), hora:normalizeHora(sanitize(row[17]?.trim()||""))});
     if (row[23]?.trim()) events.push({...lastCtx, tipo:"FUSIONLAB",  sesiones:parseInt(row[18])||1, barrio:sanitize(row[20]?.trim()||""), direccion:sanitize(row[21]?.trim()||""), lugar:sanitize(row[22]?.trim()||""), fecha:sanitize(row[23]?.trim()), hora:normalizeHora(sanitize(row[24]?.trim()||""))});
     if (row[31]?.trim()) events.push({...lastCtx, tipo:"PLAYLAB",    sesiones:parseInt(row[25])||1, barrio:sanitize(row[27]?.trim()||""), direccion:sanitize(row[28]?.trim()||""), lugar:sanitize(row[29]?.trim()||""), fecha:sanitize(row[31]?.trim()), hora:normalizeHora(sanitize(row[30]?.trim()||""))});
+  }
+  return events;
+}
+
+// ── RECREOLAB — fuente SharePoint (formato tidy, coexiste con csvToEvents() de
+// arriba mientras dure la migración — ver MIGRACION_RECREOLAB_SHAREPOINT.md) ──
+const LOCALIDAD_CODES = {
+  USA:"Usaquén", CHA:"Chapinero", SFE:"Santa Fe", SCR:"San Cristóbal", USM:"Usme",
+  TUN:"Tunjuelito", BOS:"Bosa", KEN:"Kennedy", FON:"Fontibón", ENG:"Engativá",
+  SUB:"Suba", BAR:"Barrios Unidos", TEU:"Teusaquillo", MAR:"Los Mártires",
+  ANT:"Antonio Nariño", PAR:"Puente Aranda", CAN:"La Candelaria", RUU:"Rafael Uribe Uribe",
+  CBO:"Ciudad Bolívar", SUM:"Sumapaz",
+};
+
+const TIPO_PREFIX_MAP = {
+  ACT:"ACTIVALAB", ENF:"ENTRENALAB_FUSIONLAB", PLA:"PLAYLAB",
+  REP:"REPLICA", EXP:"RECREOLAB_EXPRESS", ESP:"EVENTO_ESPECIAL",
+};
+
+function normalizeHoraV2(raw) {
+  if (raw === null || raw === undefined) return "";
+  const s = String(raw).trim();
+  if (!s) return "";
+  if (/pendiente|por definir/i.test(s)) return "Por definir";
+
+  // Hora suelta exportada como "HH:MM" o "HH:MM:SS" (24h, sin am/pm, sin rango) --
+  // el Office Script convierte el serial de Excel a este formato antes de exportar.
+  const soloHora = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (soloHora) {
+    const h = parseInt(soloHora[1], 10);
+    const m = soloHora[2];
+    const ampm = h >= 12 ? "PM" : "AM";
+    const h12 = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${m} ${ampm}`;
+  }
+
+  // Rango de texto libre, mismo tratamiento que normalizeHora() (fuente vieja)
+  return s
+    .replace(/\s*a\.?\s*m\.?/gi, "AM")
+    .replace(/\s*p\.?\s*m\.?/gi, "PM")
+    .replace(/(\d)(AM|PM)/g, "$1 $2")
+    .replace(/\s+a\s+/g, " – ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+// Hora_inicio/Hora_cierre (2026-08-10) -- reemplaza a la columna única
+// Hora_Programada; ver hallazgo en MIGRACION_RECREOLAB_SHAREPOINT.md, sección
+// "2026-08-10". Cada mitad llega suelta ("9:00am", "12:00pm", sin " a " en
+// medio, a diferencia del texto combinado que traía la columna vieja) --
+// normalizeHoraV2() ya soporta horas sueltas (rama "solo hora sin rango"),
+// acá solo se combinan las dos normalizadas.
+function combinarHoraRango(inicio, cierre) {
+  const hInicio = normalizeHoraV2(inicio);
+  if (!hInicio || hInicio === "Por definir") return "Por definir"; // vacía o "Por definir" explícito
+  const hCierre = normalizeHoraV2(cierre);
+  if (!hCierre || hCierre === "Por definir") return hInicio; // sin cierre (ej. fila "En Construcción") -- solo inicio, sin rango
+  return `${hInicio} – ${hCierre}`;
+}
+
+// Lee por NOMBRE de header, no por posición -- si OAL reordena columnas en el Excel
+// no se rompe (solo se rompe visiblemente si renombran un header, preferible a
+// mostrar datos mal ubicados en silencio).
+function csvToEventosMatriz(lines) {
+  if (lines.length < 2) return [];
+  const headers = lines[0].map(h => h?.trim());
+  const idx = name => headers.indexOf(name);
+  const iId=idx("ID_Registro"), iLoc=idx("Localidad"), iNombre=idx("Nombre_Iniciativa_o_Evento"),
+        iFecha=idx("Fecha_Programada"), iHoraInicio=idx("Hora_inicio"), iHoraCierre=idx("Hora_cierre"),
+        iBarrio=idx("Barrio"), iDir=idx("Dirección"), iLugar=idx("Lugar_Especifico");
+
+  const events = [];
+  for (let r = 1; r < lines.length; r++) {
+    const row = lines[r];
+    const id = row[iId]?.trim();
+    if (!id) continue; // fila vacía (ej. la fila 2 del Excel, que viene en blanco)
+
+    const prefix = id.split("-")[0];
+    const tipo = TIPO_PREFIX_MAP[prefix] || "EVENTO_ESPECIAL"; // fallback seguro si aparece un tipo no mapeado
+    const codigoLoc = row[iLoc]?.trim();
+    const localidad = LOCALIDAD_CODES[codigoLoc] || codigoLoc || "Sin localidad";
+
+    events.push({
+      localidad: sanitize(localidad),
+      tipo,
+      sesiones: 1, // cada fila ya es una sesión individual en el modelo nuevo, no hay conteo que hacer
+      enlace: "",  // sin equivalente en la fuente nueva -- ver Adenda 3 del doc de migración
+      gestores: "",
+      nombre: sanitize(row[iNombre]?.trim() || ""),
+      barrio: sanitize(row[iBarrio]?.trim() || ""),
+      direccion: sanitize(row[iDir]?.trim() || ""),
+      lugar: sanitize(row[iLugar]?.trim() || ""),
+      fecha: sanitize(row[iFecha]?.trim() || ""),
+      hora: combinarHoraRango(row[iHoraInicio]?.trim() || "", row[iHoraCierre]?.trim() || ""),
+    });
   }
   return events;
 }
@@ -456,125 +558,6 @@ const FORTALECIMIENTO_CLR = {
   "Presencial": {bg:"#F97316", glow:"rgba(249,115,22,0.2)"},
 };
 
-// ── MUNDIAL 2026 ──────────────────────────────────────────────
-const MUNDIAL = [
-  {fase:"grupos",dia:11,mes:5,hora:"2:00 PM",local:"México",vis:"Sudáfrica",grupo:"A",estadio:"Ciudad de México",col:false},
-  {fase:"grupos",dia:11,mes:5,hora:"9:00 PM",local:"Corea del Sur",vis:"Rep. Checa",grupo:"A",estadio:"Guadalajara",col:false},
-  {fase:"grupos",dia:12,mes:5,hora:"2:00 PM",local:"Canadá",vis:"Bosnia y Herz.",grupo:"B",estadio:"Toronto",col:false},
-  {fase:"grupos",dia:12,mes:5,hora:"8:00 PM",local:"Estados Unidos",vis:"Paraguay",grupo:"D",estadio:"Los Ángeles",col:false},
-  {fase:"grupos",dia:13,mes:5,hora:"2:00 PM",local:"Catar",vis:"Suiza",grupo:"B",estadio:"San Francisco",col:false},
-  {fase:"grupos",dia:13,mes:5,hora:"5:00 PM",local:"Brasil",vis:"Marruecos",grupo:"C",estadio:"Nueva York NJ",col:false},
-  {fase:"grupos",dia:13,mes:5,hora:"8:00 PM",local:"Haití",vis:"Escocia",grupo:"C",estadio:"Boston",col:false},
-  {fase:"grupos",dia:13,mes:5,hora:"11:00 PM",local:"Australia",vis:"Turquía",grupo:"D",estadio:"Vancouver",col:false},
-  {fase:"grupos",dia:14,mes:5,hora:"12:00 PM",local:"Alemania",vis:"Curazao",grupo:"E",estadio:"Houston",col:false},
-  {fase:"grupos",dia:14,mes:5,hora:"3:00 PM",local:"Países Bajos",vis:"Japón",grupo:"F",estadio:"Dallas",col:false},
-  {fase:"grupos",dia:14,mes:5,hora:"6:00 PM",local:"Costa de Marfil",vis:"Ecuador",grupo:"E",estadio:"Filadelfia",col:false},
-  {fase:"grupos",dia:14,mes:5,hora:"9:00 PM",local:"Suecia",vis:"Túnez",grupo:"F",estadio:"Monterrey",col:false},
-  {fase:"grupos",dia:15,mes:5,hora:"11:00 AM",local:"España",vis:"Cabo Verde",grupo:"H",estadio:"Atlanta",col:false},
-  {fase:"grupos",dia:15,mes:5,hora:"2:00 PM",local:"Bélgica",vis:"Egipto",grupo:"G",estadio:"Seattle",col:false},
-  {fase:"grupos",dia:15,mes:5,hora:"5:00 PM",local:"Arabia Saudí",vis:"Uruguay",grupo:"H",estadio:"Miami",col:false},
-  {fase:"grupos",dia:15,mes:5,hora:"8:00 PM",local:"Irán",vis:"Nueva Zelanda",grupo:"G",estadio:"Los Ángeles",col:false},
-  {fase:"grupos",dia:16,mes:5,hora:"2:00 PM",local:"Francia",vis:"Senegal",grupo:"I",estadio:"Nueva York NJ",col:false},
-  {fase:"grupos",dia:16,mes:5,hora:"5:00 PM",local:"Irak",vis:"Noruega",grupo:"I",estadio:"Boston",col:false},
-  {fase:"grupos",dia:16,mes:5,hora:"8:00 PM",local:"Argentina",vis:"Argelia",grupo:"J",estadio:"Kansas City",col:false},
-  {fase:"grupos",dia:16,mes:5,hora:"11:00 PM",local:"Austria",vis:"Jordania",grupo:"J",estadio:"San Francisco",col:false},
-  {fase:"grupos",dia:17,mes:5,hora:"12:00 PM",local:"Portugal",vis:"Rep. D. Congo",grupo:"K",estadio:"Houston",col:false},
-  {fase:"grupos",dia:17,mes:5,hora:"3:00 PM",local:"Inglaterra",vis:"Croacia",grupo:"L",estadio:"Dallas",col:false},
-  {fase:"grupos",dia:17,mes:5,hora:"6:00 PM",local:"Ghana",vis:"Panamá",grupo:"L",estadio:"Toronto",col:false},
-  {fase:"grupos",dia:17,mes:5,hora:"9:00 PM",local:"Uzbekistán",vis:"Colombia",grupo:"K",estadio:"Ciudad de México",col:true},
-  {fase:"grupos",dia:18,mes:5,hora:"11:00 AM",local:"Rep. Checa",vis:"Sudáfrica",grupo:"A",estadio:"Atlanta",col:false},
-  {fase:"grupos",dia:18,mes:5,hora:"2:00 PM",local:"Suiza",vis:"Bosnia y Herz.",grupo:"B",estadio:"Los Ángeles",col:false},
-  {fase:"grupos",dia:18,mes:5,hora:"5:00 PM",local:"Canadá",vis:"Catar",grupo:"B",estadio:"Vancouver",col:false},
-  {fase:"grupos",dia:18,mes:5,hora:"8:00 PM",local:"México",vis:"Corea del Sur",grupo:"A",estadio:"Guadalajara",col:false},
-  {fase:"grupos",dia:19,mes:5,hora:"2:00 PM",local:"Estados Unidos",vis:"Australia",grupo:"D",estadio:"Seattle",col:false},
-  {fase:"grupos",dia:19,mes:5,hora:"5:00 PM",local:"Escocia",vis:"Marruecos",grupo:"C",estadio:"Boston",col:false},
-  {fase:"grupos",dia:19,mes:5,hora:"8:00 PM",local:"Brasil",vis:"Haití",grupo:"C",estadio:"Filadelfia",col:false},
-  {fase:"grupos",dia:19,mes:5,hora:"11:00 PM",local:"Turquía",vis:"Paraguay",grupo:"D",estadio:"San Francisco",col:false},
-  {fase:"grupos",dia:20,mes:5,hora:"12:00 PM",local:"Países Bajos",vis:"Suecia",grupo:"F",estadio:"Houston",col:false},
-  {fase:"grupos",dia:20,mes:5,hora:"3:00 PM",local:"Alemania",vis:"Costa de Marfil",grupo:"E",estadio:"Toronto",col:false},
-  {fase:"grupos",dia:20,mes:5,hora:"9:00 PM",local:"Ecuador",vis:"Curazao",grupo:"E",estadio:"Kansas City",col:false},
-  {fase:"grupos",dia:20,mes:5,hora:"11:00 PM",local:"Túnez",vis:"Japón",grupo:"F",estadio:"Monterrey",col:false},
-  {fase:"grupos",dia:21,mes:5,hora:"11:00 AM",local:"España",vis:"Arabia Saudí",grupo:"H",estadio:"Atlanta",col:false},
-  {fase:"grupos",dia:21,mes:5,hora:"2:00 PM",local:"Bélgica",vis:"Irán",grupo:"G",estadio:"Los Ángeles",col:false},
-  {fase:"grupos",dia:21,mes:5,hora:"5:00 PM",local:"Uruguay",vis:"Cabo Verde",grupo:"H",estadio:"Miami",col:false},
-  {fase:"grupos",dia:21,mes:5,hora:"8:00 PM",local:"Nueva Zelanda",vis:"Egipto",grupo:"G",estadio:"Vancouver",col:false},
-  {fase:"grupos",dia:22,mes:5,hora:"12:00 PM",local:"Argentina",vis:"Austria",grupo:"J",estadio:"Dallas",col:false},
-  {fase:"grupos",dia:22,mes:5,hora:"4:00 PM",local:"Francia",vis:"Irak",grupo:"I",estadio:"Filadelfia",col:false},
-  {fase:"grupos",dia:22,mes:5,hora:"7:00 PM",local:"Noruega",vis:"Senegal",grupo:"I",estadio:"Nueva York NJ",col:false},
-  {fase:"grupos",dia:22,mes:5,hora:"10:00 PM",local:"Jordania",vis:"Argelia",grupo:"J",estadio:"San Francisco",col:false},
-  {fase:"grupos",dia:23,mes:5,hora:"12:00 PM",local:"Portugal",vis:"Uzbekistán",grupo:"K",estadio:"Houston",col:false},
-  {fase:"grupos",dia:23,mes:5,hora:"3:00 PM",local:"Inglaterra",vis:"Ghana",grupo:"L",estadio:"Boston",col:false},
-  {fase:"grupos",dia:23,mes:5,hora:"6:00 PM",local:"Panamá",vis:"Croacia",grupo:"L",estadio:"Toronto",col:false},
-  {fase:"grupos",dia:23,mes:5,hora:"9:00 PM",local:"Colombia",vis:"Rep. D. Congo",grupo:"K",estadio:"Guadalajara",col:true},
-  {fase:"grupos",dia:24,mes:5,hora:"2:00 PM",local:"Suiza",vis:"Canadá",grupo:"B",estadio:"Vancouver",col:false},
-  {fase:"grupos",dia:24,mes:5,hora:"2:00 PM",local:"Bosnia",vis:"Catar",grupo:"B",estadio:"Seattle",col:false},
-  {fase:"grupos",dia:24,mes:5,hora:"5:00 PM",local:"Escocia",vis:"Brasil",grupo:"C",estadio:"Miami",col:false},
-  {fase:"grupos",dia:24,mes:5,hora:"5:00 PM",local:"Marruecos",vis:"Haití",grupo:"C",estadio:"Atlanta",col:false},
-  {fase:"grupos",dia:24,mes:5,hora:"8:00 PM",local:"Rep. Checa",vis:"México",grupo:"A",estadio:"Ciudad de México",col:false},
-  {fase:"grupos",dia:24,mes:5,hora:"8:00 PM",local:"Sudáfrica",vis:"Corea del Sur",grupo:"A",estadio:"Monterrey",col:false},
-  {fase:"grupos",dia:25,mes:5,hora:"3:00 PM",local:"Curazao",vis:"Costa de Marfil",grupo:"E",estadio:"Filadelfia",col:false},
-  {fase:"grupos",dia:25,mes:5,hora:"3:00 PM",local:"Ecuador",vis:"Alemania",grupo:"E",estadio:"Nueva York NJ",col:false},
-  {fase:"grupos",dia:25,mes:5,hora:"6:00 PM",local:"Japón",vis:"Suecia",grupo:"F",estadio:"Dallas",col:false},
-  {fase:"grupos",dia:25,mes:5,hora:"6:00 PM",local:"Túnez",vis:"Países Bajos",grupo:"F",estadio:"Kansas City",col:false},
-  {fase:"grupos",dia:25,mes:5,hora:"9:00 PM",local:"Turquía",vis:"EE.UU.",grupo:"D",estadio:"Los Ángeles",col:false},
-  {fase:"grupos",dia:25,mes:5,hora:"9:00 PM",local:"Paraguay",vis:"Australia",grupo:"D",estadio:"San Francisco",col:false},
-  {fase:"grupos",dia:26,mes:5,hora:"2:00 PM",local:"Noruega",vis:"Francia",grupo:"I",estadio:"Boston",col:false},
-  {fase:"grupos",dia:26,mes:5,hora:"2:00 PM",local:"Senegal",vis:"Irak",grupo:"I",estadio:"Toronto",col:false},
-  {fase:"grupos",dia:26,mes:5,hora:"7:00 PM",local:"Cabo Verde",vis:"Arabia Saudí",grupo:"H",estadio:"Houston",col:false},
-  {fase:"grupos",dia:26,mes:5,hora:"7:00 PM",local:"Uruguay",vis:"España",grupo:"H",estadio:"Guadalajara",col:false},
-  {fase:"grupos",dia:26,mes:5,hora:"10:00 PM",local:"Egipto",vis:"Irán",grupo:"G",estadio:"Seattle",col:false},
-  {fase:"grupos",dia:26,mes:5,hora:"10:00 PM",local:"Nueva Zelanda",vis:"Bélgica",grupo:"G",estadio:"Vancouver",col:false},
-  {fase:"grupos",dia:27,mes:5,hora:"4:00 PM",local:"Panamá",vis:"Inglaterra",grupo:"L",estadio:"Nueva York NJ",col:false},
-  {fase:"grupos",dia:27,mes:5,hora:"4:00 PM",local:"Croacia",vis:"Ghana",grupo:"L",estadio:"Filadelfia",col:false},
-  {fase:"grupos",dia:27,mes:5,hora:"6:30 PM",local:"Colombia",vis:"Portugal",grupo:"K",estadio:"Miami",col:true},
-  {fase:"grupos",dia:27,mes:5,hora:"6:30 PM",local:"Rep. D. Congo",vis:"Uzbekistán",grupo:"K",estadio:"Atlanta",col:false},
-  {fase:"grupos",dia:27,mes:5,hora:"9:00 PM",local:"Argelia",vis:"Austria",grupo:"J",estadio:"Kansas City",col:false},
-  {fase:"grupos",dia:27,mes:5,hora:"9:00 PM",local:"Jordania",vis:"Argentina",grupo:"J",estadio:"Dallas",col:false},
-  {fase:"r32",dia:28,mes:5,hora:"2:00 PM",local:"2° Grupo A",vis:"2° Grupo B",grupo:"-",estadio:"Los Ángeles",col:false},
-  {fase:"r32",dia:29,mes:5,hora:"12:00 PM",local:"1° Grupo C",vis:"2° Grupo F",grupo:"-",estadio:"Houston",col:false},
-  {fase:"r32",dia:29,mes:5,hora:"3:30 PM",local:"1° Grupo E",vis:"3° A/B/C/D/F",grupo:"-",estadio:"Boston",col:false},
-  {fase:"r32",dia:29,mes:5,hora:"8:00 PM",local:"1° Grupo F",vis:"2° Grupo C",grupo:"-",estadio:"Monterrey",col:false},
-  {fase:"r32",dia:30,mes:5,hora:"12:00 PM",local:"2° Grupo E",vis:"2° Grupo I",grupo:"-",estadio:"Dallas",col:false},
-  {fase:"r32",dia:30,mes:5,hora:"4:00 PM",local:"1° Grupo I",vis:"3° C/D/F/G/H",grupo:"-",estadio:"Nueva York NJ",col:false},
-  {fase:"r32",dia:30,mes:5,hora:"8:00 PM",local:"1° Grupo A",vis:"3° C/E/F/H/I",grupo:"-",estadio:"Ciudad de México",col:false},
-  {fase:"r32",dia:1,mes:6,hora:"11:00 AM",local:"1° Grupo L",vis:"3° E/H/I/J/K",grupo:"-",estadio:"Atlanta",col:false},
-  {fase:"r32",dia:1,mes:6,hora:"3:00 PM",local:"1° Grupo G",vis:"3° A/E/H/I/J",grupo:"-",estadio:"Seattle",col:false},
-  {fase:"r32",dia:1,mes:6,hora:"7:00 PM",local:"1° Grupo D",vis:"3° B/E/F/I/J",grupo:"-",estadio:"San Francisco",col:false},
-  {fase:"r32",dia:2,mes:6,hora:"2:00 PM",local:"1° Grupo H",vis:"2° Grupo J",grupo:"-",estadio:"Los Ángeles",col:false},
-  {fase:"r32",dia:2,mes:6,hora:"6:00 PM",local:"2° Grupo K",vis:"2° Grupo L",grupo:"-",estadio:"Toronto",col:false},
-  {fase:"r32",dia:2,mes:6,hora:"10:00 PM",local:"1° Grupo B",vis:"3° E/F/G/I/J",grupo:"-",estadio:"Vancouver",col:false},
-  {fase:"r32",dia:3,mes:6,hora:"1:00 PM",local:"2° Grupo D",vis:"2° Grupo G",grupo:"-",estadio:"Dallas",col:false},
-  {fase:"r32",dia:3,mes:6,hora:"5:00 PM",local:"1° Grupo J",vis:"2° Grupo H",grupo:"-",estadio:"Miami",col:false},
-  {fase:"r32",dia:3,mes:6,hora:"8:30 PM",local:"1° Grupo K",vis:"3° D/E/I/J/L",grupo:"-",estadio:"Kansas City",col:false},
-  {fase:"r16",dia:4,mes:6,hora:"12:00 PM",local:"G.P73",vis:"G.P75",grupo:"-",estadio:"Houston",col:false},
-  {fase:"r16",dia:4,mes:6,hora:"4:00 PM",local:"G.P74",vis:"G.P77",grupo:"-",estadio:"Filadelfia",col:false},
-  {fase:"r16",dia:5,mes:6,hora:"3:00 PM",local:"G.P76",vis:"G.P78",grupo:"-",estadio:"Nueva York NJ",col:false},
-  {fase:"r16",dia:5,mes:6,hora:"7:00 PM",local:"G.P79",vis:"G.P80",grupo:"-",estadio:"Ciudad de México",col:false},
-  {fase:"r16",dia:6,mes:6,hora:"2:00 PM",local:"G.P83",vis:"G.P84",grupo:"-",estadio:"Dallas",col:false},
-  {fase:"r16",dia:6,mes:6,hora:"7:00 PM",local:"G.P81",vis:"G.P82",grupo:"-",estadio:"Seattle",col:false},
-  {fase:"r16",dia:7,mes:6,hora:"11:00 AM",local:"G.P86",vis:"G.P88",grupo:"-",estadio:"Atlanta",col:false},
-  {fase:"r16",dia:7,mes:6,hora:"3:00 PM",local:"G.P85",vis:"G.P87",grupo:"-",estadio:"Vancouver",col:false},
-  {fase:"qf",dia:9,mes:6,hora:"3:00 PM",local:"G.P89",vis:"G.P90",grupo:"-",estadio:"Boston",col:false},
-  {fase:"qf",dia:10,mes:6,hora:"2:00 PM",local:"G.P93",vis:"G.P94",grupo:"-",estadio:"Los Ángeles",col:false},
-  {fase:"qf",dia:11,mes:6,hora:"4:00 PM",local:"G.P91",vis:"G.P92",grupo:"-",estadio:"Miami",col:false},
-  {fase:"qf",dia:11,mes:6,hora:"8:00 PM",local:"G.P95",vis:"G.P96",grupo:"-",estadio:"Kansas City",col:false},
-  {fase:"sf",dia:14,mes:6,hora:"2:00 PM",local:"G.P97",vis:"G.P98",grupo:"-",estadio:"Dallas",col:false},
-  {fase:"sf",dia:15,mes:6,hora:"2:00 PM",local:"G.P99",vis:"G.P100",grupo:"-",estadio:"Atlanta",col:false},
-  {fase:"3ro",dia:18,mes:6,hora:"4:00 PM",local:"Perdedor SF1",vis:"Perdedor SF2",grupo:"-",estadio:"Miami",col:false},
-  {fase:"final",dia:19,mes:6,hora:"2:00 PM",local:"Ganador SF1",vis:"Ganador SF2",grupo:"-",estadio:"Nueva York NJ",col:false},
-];
-
-const FASE_CFG = {
-  grupos:{label:"Grupos",color:"#3B82F6",short:"GRP"},
-  r32:   {label:"Dieciseisavos",color:"#8B5CF6",short:"R32"},
-  r16:   {label:"Octavos",color:"#EC4899",short:"R16"},
-  qf:    {label:"Cuartos",color:"#F59E0B",short:"QF"},
-  sf:    {label:"Semifinal",color:"#EF4444",short:"SF"},
-  "3ro": {label:"3er Puesto",color:"#6B7280",short:"3°"},
-  final: {label:"Final",color:"#FBBF24",short:"🏆"},
-};
-const GRUPO_CLR={A:"#F87171",B:"#FB923C",C:"#FBBF24",D:"#4ADE80",E:"#22D3EE",F:"#818CF8",G:"#F472B6",H:"#A78BFA",I:"#34D399",J:"#60A5FA",K:"#F97316",L:"#E879F9","-":"#6B7280"};
-
 // ── PARSING ───────────────────────────────────────────────────
 const MONTHS={enero:0,febrero:1,marzo:2,abril:3,mayo:4,junio:5,julio:6,agosto:7,septiembre:8,octubre:9,noviembre:10,diciembre:11};
 function parseDate(s){
@@ -620,13 +603,25 @@ function enrichTalleres(evs){return evs.map(e=>({...e,parsed:parseDate(e.fecha)}
 function enrichFortalecimiento(evs){return evs.map(e=>({...e,parsed:parseDate(e.fecha)})).filter(e=>e.parsed);}
 
 // ── TOKENS ────────────────────────────────────────────────────
-const C={bg:"#0B0E14",surface:"#131720",border:"#1E2433",text:"#E2E8F0",textMuted:"#64748B",textDim:"#475569",accent:"#F97316",accentGlow:"rgba(249,115,22,0.15)",mundial:"#FBBF24"};
+const C={bg:"#0B0E14",surface:"#131720",border:"#1E2433",text:"#E2E8F0",textMuted:"#64748B",textDim:"#475569",accent:"#F97316",accentGlow:"rgba(249,115,22,0.15)"};
 const TIPO={
+  // ── existentes (fuente Google Sheets, se mantienen mientras dure el fallback) ──
   ACTIVALAB:{bg:"#F97316",glow:"rgba(249,115,22,0.2)",icon:"⚡",label:"Activa"},
   ENTRENALAB:{bg:"#06B6D4",glow:"rgba(6,182,212,0.2)",icon:"🏋️",label:"Entrena"},
   FUSIONLAB:{bg:"#A855F7",glow:"rgba(168,85,247,0.2)",icon:"🎭",label:"Fusión"},
   PLAYLAB:{bg:"#EF4444",glow:"rgba(239,68,68,0.2)",icon:"🎲",label:"Play"},
+  // ── nuevos (fuente SharePoint, ver csvToEventosMatriz) ──
+  ENTRENALAB_FUSIONLAB:{bg:"#8B5CF6",glow:"rgba(139,92,246,0.2)",icon:"🔥",label:"Entrena/Fusión"},
+  REPLICA:{bg:"#22C55E",glow:"rgba(34,197,94,0.2)",icon:"🔁",label:"Réplica"},
+  RECREOLAB_EXPRESS:{bg:"#FACC15",glow:"rgba(250,204,21,0.2)",icon:"🚀",label:"Express"},
+  EVENTO_ESPECIAL:{bg:"#EC4899",glow:"rgba(236,72,153,0.2)",icon:"✨",label:"Especial"},
 };
+// Subconjunto de TIPO que se muestra como chip de filtro en el tab Recreolab (2026-08-10) --
+// ENTRENALAB y FUSIONLAB (fuente Google Sheets, fallback) se sacaron de esta lista a
+// propósito, NO del objeto TIPO -- sus eventos siguen pintándose con su color/ícono
+// correcto (vía TIPO[ev.tipo]) y siguen contando en "Todos" y en el panel de stats,
+// solo no tienen un botón dedicado para aislarlos.
+const TIPO_CHIPS = ["ACTIVALAB","ENTRENALAB_FUSIONLAB","PLAYLAB","REPLICA","RECREOLAB_EXPRESS","EVENTO_ESPECIAL"];
 const MFULL=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const DNAMES=["D","L","M","M","J","V","S"];
 
@@ -644,12 +639,11 @@ function EventCard({ev,expanded=false}){
         <div style=${{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
           <span style=${{padding:"3px 8px",borderRadius:6,background:t.bg,color:"#fff",fontSize:10,fontWeight:800,boxShadow:"0 1px 4px "+t.glow}}>${t.icon} ${ev.tipo}</span>
           <span style=${{padding:"3px 8px",borderRadius:6,background:C.surface,color:C.text,fontSize:10,fontWeight:600,border:"1px solid "+C.border}}>${ev.localidad}</span>
+          <span style=${{fontSize:10,color:C.textDim,fontWeight:600,fontFamily:"'JetBrains Mono'"}}>${ev.sesiones}s</span>
         </div>
-        <span style=${{fontSize:10,color:C.textDim,fontWeight:600,fontFamily:"'JetBrains Mono'"}}>${ev.sesiones}s</span>
+        <span style=${{fontSize:10,color:C.textDim,fontFamily:"'JetBrains Mono'"}}>${ev.hora}</span>
       </div>
-      <div style=${{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3}}>
-        ${ev.fecha}${ev.hora?html`<span style=${{color:C.textMuted,fontWeight:500}}> — ${ev.hora}</span>`:""}
-      </div>
+      <div style=${{fontSize:13,fontWeight:700,color:C.text,lineHeight:1.3}}>${ev.fecha}</div>
       ${expanded&&html`
         <div style=${{marginTop:8}}>
           ${dLugar&&html`<div style=${{fontSize:12,color:"#38BDF8",display:"flex",gap:4,marginBottom:3}}><span>🏠</span><span style=${{fontWeight:600}}>${dLugar}</span></div>`}
@@ -658,26 +652,6 @@ function EventCard({ev,expanded=false}){
           ${enlaceClean&&html`<div style=${{fontSize:11,color:"#A78BFA",display:"flex",gap:4,marginTop:4}}><span>👤</span><span>${enlaceClean}</span></div>`}
           ${isPending&&html`<div style=${{fontSize:10,color:"#FBBF24",marginTop:6,padding:"4px 8px",borderRadius:6,background:"rgba(251,191,36,0.08)",border:"1px solid rgba(251,191,36,0.15)",fontWeight:600}}>⚠️ Lugar pendiente por confirmar</div>`}
         </div>`}
-    </div>`;
-}
-
-function MundialCard({ev}){
-  const fase=FASE_CFG[ev.fase]||{color:"#6B7280",short:"?"};
-  const gc=GRUPO_CLR[ev.grupo]||"#6B7280";
-  return html`
-    <div class="card-hover" style=${{background:C.bg,borderRadius:12,padding:"12px 14px",marginBottom:6,border:"1px solid "+C.border,borderLeft:"3px solid "+(ev.col?"#34D399":fase.color)}}>
-      <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
-        <div style=${{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
-          <span style=${{padding:"3px 8px",borderRadius:6,background:fase.color,color:"#fff",fontSize:10,fontWeight:800}}>⚽ ${fase.short}</span>
-          ${ev.grupo!=="-"&&html`<span style=${{padding:"3px 8px",borderRadius:6,background:gc+"22",color:gc,fontSize:10,fontWeight:700,border:"1px solid "+gc+"44"}}>Grp ${ev.grupo}</span>`}
-          ${ev.col&&html`<span style=${{padding:"3px 8px",borderRadius:6,background:"rgba(52,211,153,0.12)",color:"#34D399",fontSize:10,fontWeight:700,border:"1px solid rgba(52,211,153,0.3)"}}>🇨🇴 COL</span>`}
-        </div>
-        <span style=${{fontSize:10,color:C.textDim,fontWeight:600,fontFamily:"'JetBrains Mono'"}}>${ev.hora}</span>
-      </div>
-      <div style=${{fontSize:14,fontWeight:800,color:ev.col?"#34D399":C.text,lineHeight:1.2}}>
-        ${ev.local} <span style=${{color:C.textMuted,fontWeight:400,fontSize:12}}>vs</span> ${ev.vis}
-      </div>
-      <div style=${{marginTop:4,fontSize:10,color:C.textDim}}>🏟️ ${ev.estadio}</div>
     </div>`;
 }
 
@@ -807,10 +781,8 @@ function App(){
   const [refreshing,setRefreshing]=useState(false);
   const [showSetup,setShowSetup]=useState(false);
   const [tab,setTab]=useState("recreo");
-  const [mundialFase,setMundialFase]=useState("ALL");
-  const [soloCol,setSoloCol]=useState(false);
   const [filterParque,setFilterParque]=useState("ALL");
-  const [combineWith,setCombineWith]=useState({mundial:true,parques:true,talleres:true,retos:true,fortalecimiento:true});
+  const [combineWith,setCombineWith]=useState({parques:true,talleres:true,retos:true,fortalecimiento:true});
   const [debug,setDebug]=useState("");
   const [retosEvents,setRetosEvents]=useState([]);
   const [retosSource,setRetosSource]=useState("idle");
@@ -830,8 +802,13 @@ function App(){
       if(result){
         if(result.text.length>500_000){setEvents(enrichEvents(FALLBACK));setSource("offline");return;}
         const lines=parseCSV(result.text);
+        // Guarda pensada para el formato ancho (Google Sheets, ~20 filas reales) --
+        // el formato tidy de SharePoint es 1 fila por evento, así que con volumen
+        // real de OAL este límite se puede alcanzar antes de lo que parece. Si
+        // "live-sharepoint" empieza a caer a offline sin motivo aparente, revisar
+        // este número primero.
         if(lines.length>500){setEvents(enrichEvents(FALLBACK));setSource("offline");return;}
-        const parsed=csvToEvents(lines);
+        const parsed = result.source==="live-sharepoint" ? csvToEventosMatriz(lines) : csvToEvents(lines);
         setDebug("Filas: "+lines.length+", eventos: "+parsed.length);
         if(parsed.length>0){setEvents(enrichEvents(parsed));setSource(result.source);return;}
       }
@@ -872,8 +849,7 @@ function App(){
   },[tab,retosSource]);
 
   useEffect(()=>{
-    if(tab==="mundial")setMonth(m=>m<5?5:m>6?6:m);
-    else if(tab==="parques")setMonth(4);
+    if(tab==="parques")setMonth(4);
     else if(tab==="talleres"){
       const meses=talleresEnriched.filter(e=>e.parsed&&!e.parsed.monthOnly).map(e=>e.parsed.m);
       setMonth(meses.length?Math.min(...meses):4);
@@ -887,11 +863,9 @@ function App(){
 
   const locs=useMemo(()=>[...new Set(events.map(e=>e.localidad))].sort(),[events]);
   const filtered=useMemo(()=>events.filter(e=>(filterTipo==="ALL"||e.tipo===filterTipo)&&(filterLoc==="ALL"||e.localidad===filterLoc)),[events,filterTipo,filterLoc]);
-  const mundialFiltered=useMemo(()=>MUNDIAL.filter(e=>(mundialFase==="ALL"||e.fase===mundialFase)&&(!soloCol||e.col)),[mundialFase,soloCol]);
   const parquesFiltered=useMemo(()=>parquesEnriched.filter(e=>filterParque==="ALL"||e.parque===filterParque),[parquesEnriched,filterParque]);
 
   const dayRecreo=useCallback((d)=>filtered.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[filtered,month]);
-  const dayMundial=useCallback((d)=>mundialFiltered.filter(e=>e.mes===month&&e.dia===d),[mundialFiltered,month]);
   const dayParques=useCallback((d)=>parquesFiltered.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[parquesFiltered,month]);
   const dayTalleres=useCallback((d)=>talleresEnriched.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[talleresEnriched,month]);
   const dayRetos=useCallback((d)=>retosEvents.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.d===d),[retosEvents,month]);
@@ -899,13 +873,9 @@ function App(){
 
   const monthOnlyEvents=useMemo(()=>filtered.filter(e=>e.parsed&&e.parsed.m===month&&e.parsed.monthOnly),[filtered,month]);
   const listEvents=useMemo(()=>[...filtered].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:!a.parsed.d?1:!b.parsed.d?-1:a.parsed.d-b.parsed.d),[filtered]);
-  const mundialList=useMemo(()=>[...mundialFiltered].sort((a,b)=>a.mes!==b.mes?a.mes-b.mes:a.dia-b.dia),[mundialFiltered]);
   const parquesList=useMemo(()=>[...parquesFiltered].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:a.parsed.d-b.parsed.d),[parquesFiltered]);
   const talleresList=useMemo(()=>[...talleresEnriched].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:a.parsed.d-b.parsed.d),[talleresEnriched]);
   const fortalecimientoList=useMemo(()=>[...fortalecimientoEnriched].sort((a,b)=>a.parsed.m!==b.parsed.m?a.parsed.m-b.parsed.m:a.parsed.d-b.parsed.d),[fortalecimientoEnriched]);
-
-  const minMonth=tab==="mundial"?5:0;
-  const maxMonth=tab==="mundial"?6:11;
 
   const daysInMonth=new Date(YEAR,month+1,0).getDate();
   const firstDay=new Date(YEAR,month,1).getDay();
@@ -915,13 +885,12 @@ function App(){
 
   const stats=useMemo(()=>{const s={};for(const t of Object.keys(TIPO))s[t]=filtered.filter(e=>e.tipo===t).length;return s;},[filtered]);
 
-  const statusColor=source==="live"?"#22C55E":source==="csv"?"#06B6D4":source==="loading"?C.textMuted:"#EF4444";
-  const statusBg=source==="live"?"rgba(34,197,94,0.12)":source==="csv"?"rgba(6,182,212,0.12)":source==="loading"?"rgba(100,116,139,0.12)":"rgba(239,68,68,0.12)";
-  const statusLabel=source==="loading"?"Cargando...":source==="live"?"EN VIVO":source==="csv"?"CSV":"OFFLINE";
+  const statusColor=source==="live-sharepoint"?"#22C55E":source==="live"?"#22C55E":source==="csv"?"#06B6D4":source==="loading"?C.textMuted:"#EF4444";
+  const statusBg=source==="live-sharepoint"?"rgba(34,197,94,0.12)":source==="live"?"rgba(34,197,94,0.12)":source==="csv"?"rgba(6,182,212,0.12)":source==="loading"?"rgba(100,116,139,0.12)":"rgba(239,68,68,0.12)";
+  const statusLabel=source==="loading"?"Cargando...":source==="live-sharepoint"?"EN VIVO":source==="live"?"EN VIVO (Sheets)":source==="csv"?"CSV":"OFFLINE";
 
   const TABS=[
     {k:"recreo",icon:"📅",label:"Recreolab",clr:C.accent,bg:C.accentGlow},
-    {k:"mundial",icon:"⚽",label:"Mundial",clr:C.mundial,bg:"rgba(251,191,36,0.12)"},
     {k:"combined",icon:"🔀",label:"Combinado",clr:"#818CF8",bg:"rgba(99,102,241,0.12)"},
     {k:"parques",icon:"🛡️",label:"Parques",clr:"#22C55E",bg:"rgba(34,197,94,0.12)"},
     {k:"talleres",icon:"🎓",label:"Talleres",clr:"#818CF8",bg:"rgba(99,102,241,0.12)"},
@@ -997,10 +966,10 @@ function App(){
           <div style=${{padding:"12px 16px 8px",display:"flex",flexDirection:"column",gap:8}}>
             <div style=${{display:"flex",gap:5,flexWrap:"wrap"}}>
               <button class="chip" onClick=${()=>setFilterTipo("ALL")} style=${{padding:"5px 12px",borderRadius:20,fontSize:11,fontWeight:700,background:filterTipo==="ALL"?C.text:C.surface,color:filterTipo==="ALL"?C.bg:C.textMuted}}>TODOS</button>
-              ${Object.entries(TIPO).map(([k,v])=>html`
+              ${TIPO_CHIPS.map(k=>{const v=TIPO[k];return html`
                 <button key=${k} class="chip" onClick=${()=>setFilterTipo(filterTipo===k?"ALL":k)}
                   style=${{padding:"5px 12px",borderRadius:20,fontSize:11,fontWeight:700,background:filterTipo===k?v.bg:C.surface,color:filterTipo===k?"#fff":C.textMuted,boxShadow:filterTipo===k?"0 2px 8px "+v.glow:"none"}}>
-                  ${v.icon} ${v.label}</button>`)}
+                  ${v.icon} ${v.label}</button>`;})}
             </div>
             <div style=${{display:"flex",gap:6}}>
               <select value=${filterLoc} onChange=${e=>setFilterLoc(e.target.value)}
@@ -1025,13 +994,20 @@ function App(){
                 ${monthOnlyEvents.map((ev,i)=>html`<${EventCard} key=${i} ev=${ev}/>`)}
               </div>`}
             <div style=${{padding:"12px 16px 20px"}}>
-              <div style=${{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
-                ${Object.entries(TIPO).map(([k,v])=>html`
+              <div style=${{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
+                ${TIPO_CHIPS.map(k=>{const v=TIPO[k];
+                  // ENTRENALAB/FUSIONLAB (fuente Google Sheets, fallback) no tienen tarjeta
+                  // propia -- mismo criterio que los chips de filtro (ver TIPO_CHIPS) -- pero
+                  // sus eventos NO desaparecen del conteo: se suman acá dentro de la tarjeta
+                  // "Entrena-Fusión", que conceptualmente es el mismo tipo aunque venga de una
+                  // fuente que todavía no los fusiona.
+                  const extra = k==="ENTRENALAB_FUSIONLAB" ? (stats.ENTRENALAB||0)+(stats.FUSIONLAB||0) : 0;
+                  return html`
                   <div key=${k} style=${{background:C.surface,borderRadius:10,padding:"10px 8px",textAlign:"center",border:"1px solid "+C.border}}>
                     <div style=${{fontSize:16}}>${v.icon}</div>
-                    <div style=${{fontSize:20,fontWeight:800,color:v.bg,fontFamily:"'JetBrains Mono'"}}>${stats[k]||0}</div>
+                    <div style=${{fontSize:20,fontWeight:800,color:v.bg,fontFamily:"'JetBrains Mono'"}}>${(stats[k]||0)+extra}</div>
                     <div style=${{fontSize:8,color:C.textMuted,fontWeight:700,letterSpacing:"0.5px",marginTop:1}}>${k}</div>
-                  </div>`)}
+                  </div>`;})}
               </div>
             </div>`:html`
             <div class="fade-up" style=${{padding:"12px 16px 24px"}}>
@@ -1040,81 +1016,13 @@ function App(){
             </div>`}
         </div>`}
 
-      <!-- ═══════ TAB: MUNDIAL ═══════ -->
-      ${tab==="mundial"&&html`
-        <div class="fade-up">
-          <div style=${{margin:"12px 16px 0",borderRadius:14,background:"linear-gradient(135deg,rgba(251,191,36,0.08),rgba(239,68,68,0.05))",border:"1px solid rgba(251,191,36,0.2)",padding:"14px 16px"}}>
-            <div style=${{display:"flex",alignItems:"center",gap:10}}>
-              <span style=${{fontSize:28}}>🏆</span>
-              <div>
-                <div style=${{fontSize:15,fontWeight:800,color:C.mundial}}>FIFA World Cup 2026™</div>
-                <div style=${{fontSize:11,color:C.textMuted}}>EE.UU. · Canadá · México | 11 Jun – 19 Jul 2026</div>
-              </div>
-              <div style=${{marginLeft:"auto",textAlign:"right"}}>
-                <div style=${{fontSize:12,color:"#34D399",fontWeight:800}}>🇨🇴 Colombia</div>
-                <div style=${{fontSize:10,color:C.textMuted}}>Grupo K</div>
-              </div>
-            </div>
-          </div>
-          <div style=${{padding:"10px 16px 0",display:"flex",gap:5,flexWrap:"wrap"}}>
-            <button class="chip" onClick=${()=>setMundialFase("ALL")} style=${{padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,background:mundialFase==="ALL"?C.mundial:C.surface,color:mundialFase==="ALL"?C.bg:C.textMuted}}>TODOS</button>
-            ${Object.entries(FASE_CFG).map(([k,v])=>html`
-              <button key=${k} class="chip" onClick=${()=>setMundialFase(mundialFase===k?"ALL":k)}
-                style=${{padding:"4px 10px",borderRadius:20,fontSize:10,fontWeight:700,background:mundialFase===k?v.color:C.surface,color:mundialFase===k?"#fff":C.textMuted}}>${v.short}</button>`)}
-          </div>
-          <div style=${{padding:"8px 16px 4px",display:"flex",alignItems:"center",gap:8}}>
-            <button onClick=${()=>setSoloCol(!soloCol)} style=${{padding:"5px 12px",borderRadius:20,border:"1px solid "+(soloCol?"rgba(52,211,153,0.3)":C.border),background:soloCol?"rgba(52,211,153,0.1)":C.surface,color:soloCol?"#34D399":C.textMuted,fontSize:11,fontWeight:700,cursor:"pointer"}}>🇨🇴 Solo Colombia</button>
-            <span style=${{fontSize:10,color:C.textDim}}>${MUNDIAL.filter(e=>e.col).length} partidos</span>
-          </div>
-          <${MonthNav} month=${month} setMonth=${setMonth} minMonth=${5} maxMonth=${6}/>
-          <div style=${{padding:"8px 12px"}}>
-            <div style=${{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}>
-              ${DNAMES.map((d,i)=>html`<div key=${i} style=${{textAlign:"center",fontSize:10,color:C.textDim,fontWeight:700,padding:"6px 0",letterSpacing:"0.5px"}}>${d}</div>`)}
-            </div>
-            <div style=${{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:3}}>
-              ${cells.map((day,i)=>{
-                if(!day)return html`<div key=${"e"+i}/>`;
-                const evs=dayMundial(day),has=evs.length>0;
-                const today=new Date(),isToday=today.getDate()===day&&today.getMonth()===month&&today.getFullYear()===YEAR;
-                return html`
-                  <div key=${day} onClick=${()=>has&&setSelected({evs,day,tipo:"mundial"})}
-                    style=${{minHeight:50,borderRadius:10,background:has?C.surface:"transparent",border:isToday?"2px solid "+C.mundial:has?"1px solid "+C.border:"1px solid transparent",padding:4,cursor:has?"pointer":"default",transition:"all 0.15s"}}>
-                    <div style=${{fontSize:12,fontWeight:isToday?800:has?600:400,color:isToday?C.mundial:has?C.text:C.textDim,textAlign:"center",marginBottom:3,fontFamily:"'JetBrains Mono'"}}>${day}</div>
-                    <div style=${{display:"flex",flexWrap:"wrap",gap:2,justifyContent:"center"}}>
-                      ${evs.slice(0,4).map((ev,j)=>html`<div key=${j} style=${{width:7,height:7,borderRadius:2,background:ev.col?"#34D399":FASE_CFG[ev.fase]?.color||"#555"}}/>`)}
-                      ${evs.length>4&&html`<span style=${{fontSize:7,color:C.textMuted}}>+${evs.length-4}</span>`}
-                    </div>
-                  </div>`;
-              })}
-            </div>
-          </div>
-          <div style=${{padding:"8px 16px 24px"}}>
-            ${(()=>{
-              const mEvs=mundialList.filter(ev=>ev.mes===month);
-              if(!mEvs.length)return html`<div style=${{textAlign:"center",padding:40,color:C.textMuted}}><div style=${{fontSize:32,marginBottom:8}}>⚽</div><p>Sin partidos con estos filtros</p></div>`;
-              let lastDay=-1;
-              return mEvs.map((ev,i)=>{
-                const isNew=ev.dia!==lastDay;lastDay=ev.dia;
-                const wd=new Date(YEAR,ev.mes,ev.dia).toLocaleDateString("es-CO",{weekday:"long"});
-                return html`<div key=${i}>
-                  ${isNew&&html`<div style=${{display:"flex",alignItems:"center",gap:8,padding:"12px 0 6px",borderBottom:"1px solid "+C.border,marginBottom:6}}>
-                    <div style=${{fontSize:20,fontWeight:800,color:C.mundial,fontFamily:"'JetBrains Mono'"}}>${ev.dia}</div>
-                    <div><div style=${{fontSize:12,fontWeight:700,color:C.text,textTransform:"capitalize"}}>${wd}</div><div style=${{fontSize:10,color:C.textMuted}}>${MFULL[ev.mes]} 2026</div></div>
-                  </div>`}
-                  <${MundialCard} ev=${ev}/>
-                </div>`;
-              });
-            })()}
-          </div>
-        </div>`}
-
       <!-- ═══════ TAB: COMBINADO ═══════ -->
       ${tab==="combined"&&html`
         <div class="fade-up">
           <div style=${{margin:"12px 16px 0",padding:"14px",borderRadius:12,background:C.surface,border:"1px solid "+C.border}}>
             <div style=${{fontSize:11,fontWeight:700,color:"#818CF8",marginBottom:10,letterSpacing:"0.5px"}}>🔀 VISTA COMBINADA — Cruces con Recreolab</div>
             <div style=${{display:"flex",gap:6,flexWrap:"wrap"}}>
-              ${[{k:"mundial",label:"⚽ Mundial",clr:C.mundial},{k:"parques",label:"🛡️ Parques",clr:"#22C55E"},{k:"talleres",label:"🎓 Talleres",clr:"#6366F1"},{k:"retos",label:"🏆 Retos",clr:"#10B981"},{k:"fortalecimiento",label:"🌱 Fortalecimiento",clr:"#A855F7"}].map(({k,label,clr})=>html`
+              ${[{k:"parques",label:"🛡️ Parques",clr:"#22C55E"},{k:"talleres",label:"🎓 Talleres",clr:"#6366F1"},{k:"retos",label:"🏆 Retos",clr:"#10B981"},{k:"fortalecimiento",label:"🌱 Fortalecimiento",clr:"#A855F7"}].map(({k,label,clr})=>html`
                 <button key=${k} onClick=${()=>setCombineWith(p=>({...p,[k]:!p[k]}))}
                   style=${{padding:"6px 12px",borderRadius:20,border:"2px solid "+(combineWith[k]?clr:C.border),background:combineWith[k]?clr+"18":"transparent",color:combineWith[k]?clr:C.textMuted,fontSize:11,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}}>
                   ${label} ${combineWith[k]?"✓":""}
@@ -1122,7 +1030,6 @@ function App(){
             </div>
             <div style=${{display:"flex",gap:12,flexWrap:"wrap",marginTop:10,paddingTop:10,borderTop:"1px solid "+C.border}}>
               <div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:"50%",background:C.accent}}/><span style=${{fontSize:10,color:C.textMuted}}>Recreolab</span></div>
-              ${combineWith.mundial&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:C.mundial}}/><span style=${{fontSize:10,color:C.textMuted}}>Mundial</span></div>`}
               ${combineWith.parques&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:"#22C55E"}}/><span style=${{fontSize:10,color:C.textMuted}}>Parques</span></div>`}
               ${combineWith.talleres&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:"#6366F1"}}/><span style=${{fontSize:10,color:C.textMuted}}>Talleres</span></div>`}
               ${combineWith.retos&&html`<div style=${{display:"flex",alignItems:"center",gap:4}}><div style=${{width:9,height:9,borderRadius:2,background:"#10B981"}}/><span style=${{fontSize:10,color:C.textMuted}}>Retos</span></div>`}
@@ -1139,22 +1046,20 @@ function App(){
               ${cells.map((day,i)=>{
                 if(!day)return html`<div key=${"e"+i}/>`;
                 const rEvs=dayRecreo(day);
-                const mEvs=combineWith.mundial?dayMundial(day):[];
                 const pEvs=combineWith.parques?dayParques(day):[];
                 const tEvs=combineWith.talleres?dayTalleres(day):[];
                 const reEvs=combineWith.retos?dayRetos(day):[];
                 const fEvs=combineWith.fortalecimiento?dayFortalecimiento(day):[];
-                const hasR=rEvs.length>0,hasOther=mEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0||fEvs.length>0;
+                const hasR=rEvs.length>0,hasOther=pEvs.length>0||tEvs.length>0||reEvs.length>0||fEvs.length>0;
                 const hasAny=hasR||hasOther,isConflict=hasR&&hasOther;
                 const today=new Date(),isToday=today.getDate()===day&&today.getMonth()===month&&today.getFullYear()===YEAR;
                 return html`
-                  <div key=${day} onClick=${()=>{if(hasAny)setSelected({recreo:rEvs,mundial:mEvs,parques:pEvs,talleres:tEvs,retos:reEvs,fortalecimiento:fEvs,day,tipo:"combined"});}}
+                  <div key=${day} onClick=${()=>{if(hasAny)setSelected({recreo:rEvs,parques:pEvs,talleres:tEvs,retos:reEvs,fortalecimiento:fEvs,day,tipo:"combined"});}}
                     style=${{minHeight:52,borderRadius:10,background:isConflict?"rgba(239,68,68,0.06)":hasAny?C.surface:"transparent",border:isConflict?"2px solid rgba(239,68,68,0.4)":isToday?"2px solid "+C.accent:hasAny?"1px solid "+C.border:"1px solid transparent",padding:4,cursor:hasAny?"pointer":"default",transition:"all 0.15s"}}>
                     <div style=${{fontSize:12,fontWeight:isToday?800:hasAny?600:400,color:isConflict?"#EF4444":isToday?C.accent:hasAny?C.text:C.textDim,textAlign:"center",marginBottom:2,fontFamily:"'JetBrains Mono'"}}>${day}</div>
                     ${isConflict&&html`<div style=${{fontSize:7,textAlign:"center",marginBottom:1}}>⚠️</div>`}
                     <div style=${{display:"flex",flexWrap:"wrap",gap:1,justifyContent:"center"}}>
                       ${rEvs.slice(0,2).map((_,j)=>html`<div key=${"r"+j} style=${{width:6,height:6,borderRadius:"50%",background:C.accent}}/>`)}
-                      ${mEvs.slice(0,1).map((_,j)=>html`<div key=${"m"+j} style=${{width:6,height:6,borderRadius:2,background:C.mundial}}/>`)}
                       ${pEvs.slice(0,1).map((_,j)=>html`<div key=${"p"+j} style=${{width:6,height:6,borderRadius:2,background:"#22C55E"}}/>`)}
                       ${tEvs.slice(0,1).map((_,j)=>html`<div key=${"t"+j} style=${{width:6,height:6,borderRadius:2,background:"#6366F1"}}/>`)}
                       ${reEvs.slice(0,1).map((_,j)=>html`<div key=${"re"+j} style=${{width:6,height:6,borderRadius:2,background:"#10B981"}}/>`)}
@@ -1168,7 +1073,6 @@ function App(){
             ${(()=>{
               const daysSet=new Set([
                 ...filtered.filter(e=>e.parsed&&e.parsed.m===month&&!e.parsed.monthOnly).map(e=>e.parsed.d),
-                ...(combineWith.mundial?MUNDIAL.filter(e=>e.mes===month).map(e=>e.dia):[]),
                 ...(combineWith.parques?parquesEnriched.filter(e=>e.parsed&&e.parsed.m===month&&!e.parsed.monthOnly).map(e=>e.parsed.d):[]),
                 ...(combineWith.talleres?talleresEnriched.filter(e=>e.parsed&&e.parsed.m===month&&!e.parsed.monthOnly).map(e=>e.parsed.d):[]),
                 ...(combineWith.retos?retosEvents.filter(e=>e.parsed&&e.parsed.m===month).map(e=>e.parsed.d):[]),
@@ -1178,12 +1082,11 @@ function App(){
               if(!sorted.length)return html`<div style=${{textAlign:"center",padding:40,color:C.textMuted}}><div style=${{fontSize:32,marginBottom:8}}>📭</div><p>Sin eventos en ${MFULL[month]}</p></div>`;
               return sorted.map(day=>{
                 const rEvs=dayRecreo(day);
-                const mEvs=combineWith.mundial?dayMundial(day):[];
                 const pEvs=combineWith.parques?dayParques(day):[];
                 const tEvs=combineWith.talleres?dayTalleres(day):[];
                 const reEvs=combineWith.retos?dayRetos(day):[];
                 const fEvs=combineWith.fortalecimiento?dayFortalecimiento(day):[];
-                const isConflict=rEvs.length>0&&(mEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0||fEvs.length>0);
+                const isConflict=rEvs.length>0&&(pEvs.length>0||tEvs.length>0||reEvs.length>0||fEvs.length>0);
                 const wd=new Date(YEAR,month,day).toLocaleDateString("es-CO",{weekday:"long"});
                 return html`<div key=${day} style=${{marginBottom:16}}>
                   <div style=${{display:"flex",alignItems:"center",gap:8,padding:"10px 0 6px",borderBottom:"1px solid "+(isConflict?"rgba(239,68,68,0.3)":C.border),marginBottom:6}}>
@@ -1192,11 +1095,10 @@ function App(){
                     ${isConflict&&html`<div style=${{marginLeft:"auto",padding:"3px 8px",borderRadius:20,background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.25)",fontSize:10,color:"#EF4444",fontWeight:700}}>⚠️ Cruce</div>`}
                   </div>
                   ${rEvs.length>0&&html`<div style=${{fontSize:10,color:C.accent,fontWeight:700,marginBottom:4,letterSpacing:"0.5px"}}>📅 RECREOLAB</div>${rEvs.map((ev,i)=>html`<${EventCard} key=${"r"+i} ev=${ev} expanded=${true}/>`)}`}
-                  ${mEvs.length>0&&html`<div style=${{fontSize:10,color:C.mundial,fontWeight:700,margin:(rEvs.length>0?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>⚽ MUNDIAL</div>${mEvs.map((ev,i)=>html`<${MundialCard} key=${"m"+i} ev=${ev}/>`)}`}
-                  ${pEvs.length>0&&html`<div style=${{fontSize:10,color:"#22C55E",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🛡️ PARQUES</div>${pEvs.map((ev,i)=>html`<${ParquesCard} key=${"p"+i} ev=${ev}/>`)}`}
-                  ${tEvs.length>0&&html`<div style=${{fontSize:10,color:"#6366F1",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0||pEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🎓 TALLERES</div>${tEvs.map((ev,i)=>html`<${TallerCard} key=${"t"+i} ev=${ev}/>`)}`}
-                  ${reEvs.length>0&&html`<div style=${{fontSize:10,color:"#10B981",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0||pEvs.length>0||tEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🏆 RETOS</div>${reEvs.map((ev,i)=>html`<${RetoCard} key=${"re"+i} ev=${ev} expanded=${true}/>`)}`}
-                  ${fEvs.length>0&&html`<div style=${{fontSize:10,color:"#A855F7",fontWeight:700,margin:((rEvs.length>0||mEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🌱 FORTALECIMIENTO</div>${fEvs.map((ev,i)=>html`<${FortalecimientoCard} key=${"f"+i} ev=${ev}/>`)}`}
+                  ${pEvs.length>0&&html`<div style=${{fontSize:10,color:"#22C55E",fontWeight:700,margin:(rEvs.length>0?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🛡️ PARQUES</div>${pEvs.map((ev,i)=>html`<${ParquesCard} key=${"p"+i} ev=${ev}/>`)}`}
+                  ${tEvs.length>0&&html`<div style=${{fontSize:10,color:"#6366F1",fontWeight:700,margin:((rEvs.length>0||pEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🎓 TALLERES</div>${tEvs.map((ev,i)=>html`<${TallerCard} key=${"t"+i} ev=${ev}/>`)}`}
+                  ${reEvs.length>0&&html`<div style=${{fontSize:10,color:"#10B981",fontWeight:700,margin:((rEvs.length>0||pEvs.length>0||tEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🏆 RETOS</div>${reEvs.map((ev,i)=>html`<${RetoCard} key=${"re"+i} ev=${ev} expanded=${true}/>`)}`}
+                  ${fEvs.length>0&&html`<div style=${{fontSize:10,color:"#A855F7",fontWeight:700,margin:((rEvs.length>0||pEvs.length>0||tEvs.length>0||reEvs.length>0)?"10px":"0")+" 0 4px",letterSpacing:"0.5px"}}>🌱 FORTALECIMIENTO</div>${fEvs.map((ev,i)=>html`<${FortalecimientoCard} key=${"f"+i} ev=${ev}/>`)}`}
                 </div>`;
               });
             })()}
@@ -1441,16 +1343,13 @@ function App(){
             <div style=${{width:36,height:4,borderRadius:2,background:C.border,margin:"0 auto 14px"}}/>
             <h3 style=${{fontSize:16,fontWeight:800,marginBottom:12,letterSpacing:"-0.3px"}}>
               ${selected.day} de ${MFULL[month]}
-              ${selected.tipo==="combined"&&selected.recreo?.length>0&&selected.mundial?.length>0&&html`<span style=${{marginLeft:8,padding:"2px 8px",borderRadius:8,background:"rgba(239,68,68,0.1)",color:"#EF4444",fontSize:11}}>⚠️ Cruce</span>`}
             </h3>
             ${selected.tipo==="recreo"&&selected.evs?.map((ev,i)=>html`<${EventCard} key=${i} ev=${ev} expanded=${true}/>`)}
-            ${selected.tipo==="mundial"&&selected.evs?.map((ev,i)=>html`<${MundialCard} key=${i} ev=${ev}/>`)}
             ${selected.tipo==="parques"&&selected.evs?.map((ev,i)=>html`<${ParquesCard} key=${i} ev=${ev}/>`)}
             ${selected.tipo==="talleres"&&selected.evs?.map((ev,i)=>html`<${TallerCard} key=${i} ev=${ev}/>`)}
             ${selected.tipo==="fortalecimiento"&&selected.evs?.map((ev,i)=>html`<${FortalecimientoCard} key=${i} ev=${ev}/>`)}
             ${selected.tipo==="combined"&&html`
               ${selected.recreo?.length>0&&html`<div style=${{fontSize:11,color:C.accent,fontWeight:700,marginBottom:6,letterSpacing:"0.5px"}}>📅 RECREOLAB</div>${selected.recreo.map((ev,i)=>html`<${EventCard} key=${i} ev=${ev} expanded=${true}/>`)}`}
-              ${selected.mundial?.length>0&&html`<div style=${{fontSize:11,color:C.mundial,fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>⚽ MUNDIAL 2026</div>${selected.mundial.map((ev,i)=>html`<${MundialCard} key=${i} ev=${ev}/>`)}`}
               ${selected.parques?.length>0&&html`<div style=${{fontSize:11,color:"#22C55E",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🛡️ PARQUES</div>${selected.parques.map((ev,i)=>html`<${ParquesCard} key=${i} ev=${ev}/>`)}`}
               ${selected.talleres?.length>0&&html`<div style=${{fontSize:11,color:"#6366F1",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🎓 TALLERES</div>${selected.talleres.map((ev,i)=>html`<${TallerCard} key=${i} ev=${ev}/>`)}`}
               ${selected.retos?.length>0&&html`<div style=${{fontSize:11,color:"#10B981",fontWeight:700,margin:"12px 0 6px",letterSpacing:"0.5px"}}>🏆 RETOS</div>${selected.retos.map((ev,i)=>html`<${RetoCard} key=${i} ev=${ev} expanded=${true}/>`)}`}
@@ -1461,7 +1360,7 @@ function App(){
         </div>`}
 
       <div style=${{padding:"8px 20px 20px",textAlign:"center"}}>
-        <p style=${{fontSize:10,color:C.textDim}}>${events.length} Recreolab · ${MUNDIAL.length} Mundial · ${PARQUES_SEG.length} Parques · ${talleresEnriched.length} Talleres${talleresSource==="live"?" (en vivo)":talleresSource==="offline"?" (offline)":""} · ${retosEvents.length} Retos · ${fortalecimientoEnriched.length} Fortalecimiento${fortalecimientoSource==="live"?" (en vivo)":fortalecimientoSource==="offline"?" (offline)":""} · ${source==="live"?"Google Sheets (en vivo)":source==="csv"?"CSV":"datos embebidos"}</p>
+        <p style=${{fontSize:10,color:C.textDim}}>${events.length} Recreolab · ${PARQUES_SEG.length} Parques · ${talleresEnriched.length} Talleres${talleresSource==="live"?" (en vivo)":talleresSource==="offline"?" (offline)":""} · ${retosEvents.length} Retos · ${fortalecimientoEnriched.length} Fortalecimiento${fortalecimientoSource==="live"?" (en vivo)":fortalecimientoSource==="offline"?" (offline)":""} · ${source==="live-sharepoint"?"SharePoint (en vivo)":source==="live"?"Google Sheets (en vivo)":source==="csv"?"CSV":"datos embebidos"}</p>
       </div>
     </div>`;
 }
