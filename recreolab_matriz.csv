@@ -1,8 +1,8 @@
-ID_Registro,Localidad,Nombre_Iniciativa_o_Evento,Fecha_Programada,Hora_Programada,Barrio,Dirección,Lugar_Especifico
-PLA-BOS-002,BOS,Des-Amor-tigüando Mitos,2026-08-19,9:00am a 12:00pm,Bosa Carbonell / Carlos Albán,Calle 72 sur 79 d - 33,Bosa Carbonell a colegio Carlos Albán Holguín Sede A
-PLA-USM-001,USM,TEJIENDO TRADICIONALES A TRAVÉS DEL JUEGO,2026-08-22,2:00 p.m a 5:00 p.m,"Marichuela, Almirante Padilla, Yomasa",Dg. 76b Sur # 1c-40,Plazoleta de la Biblioteca La Marichuela (Plazoleta Cultural)
-PLA-TEU-001,TEU,Unidos somos más equipo,2026-08-22,9:00 am a 12:00 pm,Quinta Paredes,Carrera 44B # 22-65,Parque Cádiz
-PLA-MAR-001,MAR,Juegos del pasado presente y comunidad de hoy,2026-08-28,2:00 pm a 5:00 pm,Santa Isabel,Carrera 27 con Calle 1b,Plazoleta Calipso
-PLA-SUB-003,SUB,Por definir,2026-08-30,10:00,Por definir,Por definir,Por definir
-PLA-FON-001,FON,Jugando Unidos por la Cabaña,2026-09-05,8:00 am a 1:00 pm,La Cabaña,Carrera 104B # 23G - 17,Parque La Cabaña
-PLA-TUN-001,TUN,Por definir,2026-09-05,Por definir,Por definir,Por definir,Por definir
+ID_Registro,Localidad,Nombre_Iniciativa_o_Evento,Fecha_Programada,Hora_inicio,Hora_cierre,Barrio,Dirección,Lugar_Especifico
+PLA-BOS-002,BOS,Des-Amor-tigüando Mitos,2026-08-19,9:00am,12:00pm,Bosa Carbonell / Carlos Albán,Calle 72 sur 79 d - 33,Bosa Carbonell a colegio Carlos Albán Holguín Sede A
+PLA-USM-001,USM,TEJIENDO TRADICIONALES A TRAVÉS DEL JUEGO,2026-08-22,2:00pm,5:00pm,"Marichuela, Almirante Padilla, Yomasa",Dg. 76b Sur # 1c-40,Plazoleta de la Biblioteca La Marichuela (Plazoleta Cultural)
+PLA-TEU-001,TEU,Unidos somos más equipo,2026-08-22,9:00am,12:00pm,Quinta Paredes,Carrera 44B # 22-65,Parque Cádiz
+PLA-MAR-001,MAR,Juegos del pasado presente y comunidad de hoy,2026-08-28,2:00pm,5:00pm,Santa Isabel,Carrera 27 con Calle 1b,Plazoleta Calipso
+PLA-SUB-003,SUB,Por definir,2026-08-30,10:00am,,Por definir,Por definir,Por definir
+PLA-FON-001,FON,Jugando Unidos por la Cabaña,2026-09-05,8:00am,1:00pm,La Cabaña,Carrera 104B # 23G - 17,Parque La Cabaña
+PLA-TUN-001,TUN,Por definir,2026-09-05,Por definir,,Por definir,Por definir,Por definir
