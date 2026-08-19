@@ -1,8 +1,11 @@
-ID_Registro,Localidad,Nombre_Iniciativa_o_Evento,Fecha_Programada,Hora_inicio,Hora_cierre,Barrio,Dirección,Lugar_Especifico
-PLA-BOS-002,BOS,Des-Amor-tigüando Mitos,2026-08-19,9:00am,12:00pm,Bosa Carbonell / Carlos Albán,Calle 72 sur 79 d - 33,Bosa Carbonell a colegio Carlos Albán Holguín Sede A
-PLA-USM-001,USM,TEJIENDO TRADICIONALES A TRAVÉS DEL JUEGO,2026-08-22,2:00pm,5:00pm,"Marichuela, Almirante Padilla, Yomasa",Dg. 76b Sur # 1c-40,Plazoleta de la Biblioteca La Marichuela (Plazoleta Cultural)
-PLA-TEU-001,TEU,Unidos somos más equipo,2026-08-22,9:00am,12:00pm,Quinta Paredes,Carrera 44B # 22-65,Parque Cádiz
-PLA-MAR-001,MAR,Juegos del pasado presente y comunidad de hoy,2026-08-28,1:30pm,5:00pm,Santa Isabel,Calle 1g con  Carrera 27a,Parque Santa Isabel
-PLA-SUB-003,SUB,El Tejer del Viento,2026-08-30,11:00am,16:00,San Jorge,Cll 127 C con Cra 87 A,Tanque del Indio - Parque Las Cometas
-PLA-FON-001,FON,Jugando Unidos por la Cabaña,2026-09-05,8:00am,1:00pm,La Cabaña,Carrera 104B # 23G - 17,Parque La Cabaña
-PLA-TUN-001,TUN,Por definir,2026-09-05,Por definir,,Por definir,Por definir,Por definir
+ID_Registro,Localidad,Nombre_Iniciativa_o_Evento,Fecha_Programada,Hora_inicio,Hora_cierre,Barrio,Direccion,Lugar_Especifico
+PLA-BOS-002,BOS,Des-Amor-tigüando Mitos,2026-08-19,9:00am,12:00pm,Bosa Carbonell / Carlos Albán,,Bosa Carbonell a colegio Carlos Albán Holguín Sede A
+PLA-USM-001,USM,TEJIENDO TRADICIONALES A TRAVÉS DEL JUEGO,2026-08-22,2:00pm,5:00pm,"Marichuela, Almirante Padilla, Yomasa",,Plazoleta de la Biblioteca La Marichuela (Plazoleta Cultural)
+PLA-TEU-001,TEU,Unidos somos más equipo,2026-08-22,9:00am,12:00pm,Quinta Paredes,,Parque Cádiz
+PLA-MAR-001,MAR,Juegos del pasado presente y comunidad de hoy,2026-08-28,1:30pm,5:00pm,Santa Isabel,,Parque Santa Isabel
+PLA-SUB-003,SUB,El Tejer del Viento,2026-08-30,11:00am,16:00,San Jorge,,Tanque del Indio - Parque Las Cometas
+PLA-FON-001,FON,Jugando Unidos por la Cabaña,2026-09-05,8:00am,1:00pm,La Cabaña,,Parque La Cabaña
+PLA-TUN-001,TUN,Por definir,2026-09-05,Por definir,,Por definir,,Por definir
+PLA-FON-2026-08-22,FON,"Cambulos y Gualandays  "" Enamorémonos de nuestro barrio """,2026-08-22,9:00am,12:00pm,Los Cambulos,,Parque Los Cambulos
+PLA-TUN-2026-08-30,TUN,"Vive Venecia ""Un territorio que renace y enaltece""",2026-08-30,09:00,13:00,Venecia,,parque proximidad Venecia
+PLA-TUN-2026-09-05,TUN,Un día de felicidad,2026-09-05,09:00,13:00,San Carlos,,Parque proximidad San Carlos
