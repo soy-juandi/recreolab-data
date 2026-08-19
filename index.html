@@ -1060,6 +1060,7 @@ function App(){
                     ${isConflict&&html`<div style=${{fontSize:7,textAlign:"center",marginBottom:1}}>⚠️</div>`}
                     <div style=${{display:"flex",flexWrap:"wrap",gap:1,justifyContent:"center"}}>
                       ${rEvs.slice(0,2).map((_,j)=>html`<div key=${"r"+j} style=${{width:6,height:6,borderRadius:"50%",background:C.accent}}/>`)}
+                      ${rEvs.length>2&&html`<div key="r-more" style=${{fontSize:7,lineHeight:"6px",fontWeight:700,color:C.accent}}>+${rEvs.length-2}</div>`}
                       ${pEvs.slice(0,1).map((_,j)=>html`<div key=${"p"+j} style=${{width:6,height:6,borderRadius:2,background:"#22C55E"}}/>`)}
                       ${tEvs.slice(0,1).map((_,j)=>html`<div key=${"t"+j} style=${{width:6,height:6,borderRadius:2,background:"#6366F1"}}/>`)}
                       ${reEvs.slice(0,1).map((_,j)=>html`<div key=${"re"+j} style=${{width:6,height:6,borderRadius:2,background:"#10B981"}}/>`)}
