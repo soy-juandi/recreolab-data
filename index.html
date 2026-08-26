@@ -42,15 +42,13 @@
 const { useState, useEffect, useMemo, useCallback } = React;
 const html = htm.bind(React.createElement);
 
-const SHEET_ID   = "1dRjF-db6TXdQZx44Snl6hJs1nsHIzaLz5gh-g8YiqUo";
-const SHEET_NAME = "Cronograma general";
 const YEAR       = 2026;
 const RETOS_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/retos_idrd.csv";
-// Migración SharePoint (MIGRACION_RECREOLAB_SHAREPOINT.md) — formato tidy (una fila
-// por evento), header ID_Registro,Localidad,Nombre_Iniciativa_o_Evento,Fecha_Programada,
-// Hora_Programada,Barrio,Dirección,Lugar_Especifico. Publicado por
-// office-script-recreolab-matriz.ts vía Power Automate. Mientras el flow no exista o
-// falle, fetchCSV() cae a Google Sheets (fallback, ver más abajo) sin que nadie lo note.
+// Fuente única de Recreolab (2026-08-26): Google Sheets retirado por completo —
+// ver MIGRACION_RECREOLAB_SHAREPOINT.md. Formato tidy (una fila por evento),
+// publicado por office-script-recreolab-matriz.ts vía Power Automate a
+// recreolab-data/recreolab_matriz.csv. Sin fallback externo: si este fetch
+// falla, la app cae directo a los datos embebidos (FALLBACK, más abajo).
 const RECREOLAB_MATRIZ_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/recreolab_matriz.csv";
 // Contrato CSV (publicado por office-script-talleres.ts vía Power Automate):
 // taller,fecha,hora,lugar,participantes,grupo,sesion — fecha en dd-mm-yyyy
@@ -66,23 +64,16 @@ function sanitize(val) {
 
 // ── DATA FETCHING ─────────────────────────────────────────────
 async function fetchCSV() {
-  const urls = [
-    { source:"live-sharepoint", url: RECREOLAB_MATRIZ_CSV_URL + "?t=" + Date.now() },
-    { source:"live", url:`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}` },
-    { source:"csv",  url:`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0` },
-  ];
-  for (const {source, url} of urls) {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
-      const res = await fetch(url, { signal: controller.signal });
-      clearTimeout(timeout);
-      if (res.ok) {
-        const text = await res.text();
-        if (text && text.length > 100) return { source, text };
-      }
-    } catch(e) {}
-  }
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch(RECREOLAB_MATRIZ_CSV_URL + "?t=" + Date.now(), { signal: controller.signal });
+    clearTimeout(timeout);
+    if (res.ok) {
+      const text = await res.text();
+      if (text && text.length > 100) return { source:"live-sharepoint", text };
+    }
+  } catch(e) {}
   return null;
 }
 
@@ -188,39 +179,8 @@ function normalizeHora(h) {
     .replace(/\s{2,}/g," ").trim();
 }
 
-function csvToEvents(lines) {
-  if (lines.length < 2) return [];
-  const events = [];
-  let lastCtx = null;
-  for (let r=1;r<lines.length;r++) {
-    const row = lines[r];
-    const localidad = row[0]?.trim();
-    const isSubRow = !localidad || localidad === "";
-    if (isSubRow) {
-      // Sub-fila: hereda contexto de la fila principal (localidad, modalidad, enlace, gestores)
-      if (lastCtx && row[31]?.trim()) {
-        events.push({...lastCtx, tipo:"PLAYLAB", sesiones:parseInt(row[25])||1,
-          barrio:sanitize(row[27]?.trim()||""), direccion:sanitize(row[28]?.trim()||""),
-          lugar:sanitize(row[29]?.trim()||""), fecha:sanitize(row[31]?.trim()),
-          hora:normalizeHora(sanitize(row[30]?.trim()||""))});
-      }
-      continue;
-    }
-    if (localidad === "LOCALIDADES") continue;
-    const modalidad = parseInt(row[1])||0;
-    const enlace = sanitize((row[3]?.trim()||"").replace(/^Enlace:\s*/i,"").replace(/\n/g,", ").trim());
-    const gestores = sanitize(row[4]?.trim()||"");
-    lastCtx = {localidad:sanitize(localidad), modalidad, enlace, gestores};
-    if (row[6]?.trim())  events.push({...lastCtx, tipo:"ACTIVALAB",  sesiones:parseInt(row[2])||2,  barrio:sanitize(row[7]?.trim()||""),  direccion:sanitize(row[8]?.trim()||""),  lugar:sanitize(row[9]?.trim()||""),  fecha:sanitize(row[6]?.trim()),  hora:normalizeHora(sanitize(row[10]?.trim()||""))});
-    if (row[16]?.trim()) events.push({...lastCtx, tipo:"ENTRENALAB", sesiones:parseInt(row[11])||2, barrio:sanitize(row[13]?.trim()||""), direccion:sanitize(row[15]?.trim()||""), lugar:sanitize(row[14]?.trim()||""), fecha:sanitize(row[16]?.trim()), hora:normalizeHora(sanitize(row[17]?.trim()||""))});
-    if (row[23]?.trim()) events.push({...lastCtx, tipo:"FUSIONLAB",  sesiones:parseInt(row[18])||1, barrio:sanitize(row[20]?.trim()||""), direccion:sanitize(row[21]?.trim()||""), lugar:sanitize(row[22]?.trim()||""), fecha:sanitize(row[23]?.trim()), hora:normalizeHora(sanitize(row[24]?.trim()||""))});
-    if (row[31]?.trim()) events.push({...lastCtx, tipo:"PLAYLAB",    sesiones:parseInt(row[25])||1, barrio:sanitize(row[27]?.trim()||""), direccion:sanitize(row[28]?.trim()||""), lugar:sanitize(row[29]?.trim()||""), fecha:sanitize(row[31]?.trim()), hora:normalizeHora(sanitize(row[30]?.trim()||""))});
-  }
-  return events;
-}
-
-// ── RECREOLAB — fuente SharePoint (formato tidy, coexiste con csvToEvents() de
-// arriba mientras dure la migración — ver MIGRACION_RECREOLAB_SHAREPOINT.md) ──
+// ── RECREOLAB — fuente SharePoint (formato tidy, única fuente desde 2026-08-26
+// — ver MIGRACION_RECREOLAB_SHAREPOINT.md) ──
 const LOCALIDAD_CODES = {
   USA:"Usaquén", CHA:"Chapinero", SFE:"Santa Fe", SCR:"San Cristóbal", USM:"Usme",
   TUN:"Tunjuelito", BOS:"Bosa", KEN:"Kennedy", FON:"Fontibón", ENG:"Engativá",
@@ -229,10 +189,26 @@ const LOCALIDAD_CODES = {
   CBO:"Ciudad Bolívar", SUM:"Sumapaz",
 };
 
+// Réplica / Recreolab Express / Recreolab Express + laboratorio se muestran
+// como Playlab (mismo color/chip) — el subtipo real queda como "detalle" en
+// la tarjeta del evento, no como categoría propia (decisión de Juan, 2026-08-26).
 const TIPO_PREFIX_MAP = {
   ACT:"ACTIVALAB", ENF:"ENTRENALAB_FUSIONLAB", PLA:"PLAYLAB",
-  REP:"REPLICA", EXP:"RECREOLAB_EXPRESS", ESP:"EVENTO_ESPECIAL",
+  REP:"PLAYLAB", EXP:"PLAYLAB", ESP:"PLAYLAB",
 };
+
+// Clasificación primaria: texto de Fase_o_Subtipo (dropdown controlado en el
+// Excel, ver Adenda 3 de MIGRACION_RECREOLAB_SHAREPOINT.md). Solo Activalab y
+// Sesión 2 tienen categoría propia; cualquier otro valor (Playlab, Réplica,
+// Recreolab Express, Recreolab Express + laboratorio, o algo nuevo que OAL
+// agregue al dropdown más adelante) cae en Playlab por defecto -- seguro por
+// diseño, nunca deja un evento sin clasificar.
+function claseDesdeFaseSubtipo(fase) {
+  const f = (fase || "").trim();
+  if (/^sesión\s*1|^activalab$/i.test(f)) return "ACTIVALAB";
+  if (/^sesión\s*2|entrenalab.*fusionlab/i.test(f)) return "ENTRENALAB_FUSIONLAB";
+  return "PLAYLAB";
+}
 
 function normalizeHoraV2(raw) {
   if (raw === null || raw === undefined) return "";
@@ -283,23 +259,31 @@ function csvToEventosMatriz(lines) {
   const headers = lines[0].map(h => h?.trim());
   const idx = name => headers.indexOf(name);
   const iId=idx("ID_Registro"), iLoc=idx("Localidad"), iNombre=idx("Nombre_Iniciativa_o_Evento"),
+        iFase=idx("Fase_o_Subtipo"),
         iFecha=idx("Fecha_Programada"), iHoraInicio=idx("Hora_inicio"), iHoraCierre=idx("Hora_cierre"),
         iBarrio=idx("Barrio"), iDir=idx("Dirección"), iLugar=idx("Lugar_Especifico");
 
   const events = [];
   for (let r = 1; r < lines.length; r++) {
     const row = lines[r];
-    const id = row[iId]?.trim();
-    if (!id) continue; // fila vacía (ej. la fila 2 del Excel, que viene en blanco)
-
-    const prefix = id.split("-")[0];
-    const tipo = TIPO_PREFIX_MAP[prefix] || "EVENTO_ESPECIAL"; // fallback seguro si aparece un tipo no mapeado
     const codigoLoc = row[iLoc]?.trim();
+    // Mismo criterio que el Office Script (localidad no vacía, no ID_Registro):
+    // así una fila nueva sin ID formal todavía no se pierde ni se clasifica mal.
+    if (!codigoLoc) continue; // fila vacía (ej. la fila 2 del Excel, que viene en blanco)
+
+    const id = row[iId]?.trim() || "";
+    const faseSubtipo = row[iFase]?.trim() || "";
+    // Fase_o_Subtipo (dropdown controlado) manda; el prefijo del ID_Registro
+    // solo se usa si por algún motivo Fase_o_Subtipo llega vacío.
+    const tipo = faseSubtipo
+      ? claseDesdeFaseSubtipo(faseSubtipo)
+      : (TIPO_PREFIX_MAP[id.split("-")[0]] || "PLAYLAB");
     const localidad = LOCALIDAD_CODES[codigoLoc] || codigoLoc || "Sin localidad";
 
     events.push({
       localidad: sanitize(localidad),
       tipo,
+      detalle: sanitize(faseSubtipo), // subtipo real (ej. "Réplica") para mostrar en la tarjeta
       sesiones: 1, // cada fila ya es una sesión individual en el modelo nuevo, no hay conteo que hacer
       enlace: "",  // sin equivalente en la fuente nueva -- ver Adenda 3 del doc de migración
       gestores: "",
@@ -430,59 +414,59 @@ function parseRetosCSV(text) {
 // ── FALLBACK DATA ─────────────────────────────────────────────
 const FALLBACK = [
   {localidad:"Kennedy",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Ivonn Revelo, Santiago Mejia, Juan Pablo",barrio:"Salón comunal Britalia",direccion:"CR 81 B # 47 A - 16 SUR",fecha:"8 de abril",hora:"3:00 PM"},
-  {localidad:"Kennedy",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"Ivonn Revelo, Santiago Mejia, Juan Pablo",barrio:"J.A.C. Barrio Roma",direccion:"CLL 54 SUR # 78 I - 10",fecha:"10 de abril",hora:"3:00 PM"},
-  {localidad:"Kennedy",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"19 de abril",hora:""},
+  {localidad:"Kennedy",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"Ivonn Revelo, Santiago Mejia, Juan Pablo",barrio:"J.A.C. Barrio Roma",direccion:"CLL 54 SUR # 78 I - 10",fecha:"10 de abril",hora:"3:00 PM"},
+  {localidad:"Kennedy",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"19 de abril",hora:""},
   {localidad:"Kennedy",modalidad:60,tipo:"PLAYLAB",sesiones:3,enlace:"",barrio:"",direccion:"",fecha:"mayo",hora:""},
   {localidad:"Suba",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Ivonn Revelo, Juan Pablo",barrio:"La Toma",direccion:"CLL 86 # 147 - 23",fecha:"15 de mayo",hora:"9:00 AM"},
-  {localidad:"Suba",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Casa de la Cultura de Suba",direccion:"AC 145 # 104 - 50",fecha:"22 mayo",hora:"9:00 AM"},
+  {localidad:"Suba",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Casa de la Cultura de Suba",direccion:"AC 145 # 104 - 50",fecha:"22 mayo",hora:"9:00 AM"},
   {localidad:"Engativá",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Ivonn Revelo, Vanessa Henriquez",barrio:"Jaboque - Villa Dorado",direccion:"CL 67 A # 110 - 16",fecha:"24 de abril",hora:"4:00 PM"},
-  {localidad:"Engativá",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Salón Comunal Villa el Dorado",direccion:"CL 67 A # 110 - 16",fecha:"25 de abril",hora:"9:00 AM"},
-  {localidad:"Engativá",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"26 o 27 de abril",hora:""},
+  {localidad:"Engativá",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Salón Comunal Villa el Dorado",direccion:"CL 67 A # 110 - 16",fecha:"25 de abril",hora:"9:00 AM"},
+  {localidad:"Engativá",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"26 o 27 de abril",hora:""},
   {localidad:"Bosa",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Santiago Mejia, Diana Viancha, Estefania Gomez",barrio:"Carbonell",direccion:"Pendiente",fecha:"16 de mayo",hora:""},
-  {localidad:"Bosa",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Carbonell",direccion:"Pendiente",fecha:"mayo",hora:""},
+  {localidad:"Bosa",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Carbonell",direccion:"Pendiente",fecha:"mayo",hora:""},
   {localidad:"Usme",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Erika Barreto, Diana Viancha",barrio:"Almirante Padilla",direccion:"Cl. 77 Sur #10-46",fecha:"18 de abril",hora:"10:00 AM"},
-  {localidad:"Usme",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Almirante Padilla",direccion:"Cl. 77 Sur #10-46",fecha:"21 de abril",hora:"10:00 AM"},
-  {localidad:"Usme",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"11 de mayo",hora:""},
+  {localidad:"Usme",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Almirante Padilla",direccion:"Cl. 77 Sur #10-46",fecha:"21 de abril",hora:"10:00 AM"},
+  {localidad:"Usme",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"11 de mayo",hora:""},
   {localidad:"San Cristóbal",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Diana Viancha, Ivonn Revelo",barrio:"Canadá Güira Salón Comunal",direccion:"CL 48 SUR # 0 ESTE 13",fecha:"9 de abril",hora:"6:00 PM"},
-  {localidad:"San Cristóbal",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Canadá Güira",direccion:"CL 48 SUR # 0 ESTE 13",fecha:"16 abril",hora:"6:00 PM"},
-  {localidad:"San Cristóbal",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"30 de abril",hora:""},
+  {localidad:"San Cristóbal",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Canadá Güira",direccion:"CL 48 SUR # 0 ESTE 13",fecha:"16 abril",hora:"6:00 PM"},
+  {localidad:"San Cristóbal",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"30 de abril",hora:""},
   {localidad:"San Cristóbal",modalidad:60,tipo:"PLAYLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"30 de abril",hora:""},
   {localidad:"Fontibón",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Juan Pablo, Santiago Mejia",barrio:"Salón Comunal La Cabaña",direccion:"Pendiente",fecha:"8 de mayo",hora:""},
   {localidad:"Usaquén",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Vanessa Henriquez, Ivonn Revelo",barrio:"Santa Cecilia Baja",direccion:"CR 5 A # 164 A - 07",fecha:"2 mayo",hora:"9:00 AM"},
-  {localidad:"Usaquén",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Santa Cecilia Baja",direccion:"CR 5 A # 164 A - 07",fecha:"3 mayo",hora:""},
-  {localidad:"Usaquén",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"7 de mayo",hora:""},
+  {localidad:"Usaquén",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Santa Cecilia Baja",direccion:"CR 5 A # 164 A - 07",fecha:"3 mayo",hora:""},
+  {localidad:"Usaquén",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"7 de mayo",hora:""},
   {localidad:"Rafael Uribe U",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Erika Barreto, Juan Pablo",barrio:"Barrio Inglés",direccion:"CR 26 A # 41 - 10 SUR",fecha:"6 de abril",hora:"5:00 PM"},
-  {localidad:"Rafael Uribe U",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Barrio Inglés",direccion:"CR 26 A # 41 - 10 SUR",fecha:"13 abril",hora:"5:00 PM"},
-  {localidad:"Rafael Uribe U",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"4 de mayo",hora:""},
+  {localidad:"Rafael Uribe U",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Barrio Inglés",direccion:"CR 26 A # 41 - 10 SUR",fecha:"13 abril",hora:"5:00 PM"},
+  {localidad:"Rafael Uribe U",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"4 de mayo",hora:""},
   {localidad:"Rafael Uribe U",modalidad:60,tipo:"PLAYLAB",sesiones:2,enlace:"",barrio:"",direccion:"",fecha:"mayo",hora:""},
   {localidad:"Ciudad Bolívar",modalidad:60,tipo:"ACTIVALAB",sesiones:2,enlace:"Diana Viancha, Erika Barreto",barrio:"Mochuelo",direccion:"Calle 91 B Bis Sur 18 H 14",fecha:"14 de marzo",hora:"1:00 PM"},
-  {localidad:"Ciudad Bolívar",modalidad:60,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"I.E.D. Rural José Celestino Mutis",direccion:"Vereda Mochuelo Bajo, km 10 vía Quiba",fecha:"18 de abril",hora:"1:00 – 4:00 PM"},
-  {localidad:"Ciudad Bolívar",modalidad:60,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"mayo",hora:""},
+  {localidad:"Ciudad Bolívar",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"I.E.D. Rural José Celestino Mutis",direccion:"Vereda Mochuelo Bajo, km 10 vía Quiba",fecha:"18 de abril",hora:"1:00 – 4:00 PM"},
+  {localidad:"Ciudad Bolívar",modalidad:60,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"mayo",hora:""},
   {localidad:"Ciudad Bolívar",modalidad:60,tipo:"PLAYLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"mayo",hora:""},
   {localidad:"Los Mártires",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Santiago Mejia, Diana Viancha",barrio:"Crea La Pepita",direccion:"Pendiente",fecha:"25 de abril",hora:"1:00 PM"},
-  {localidad:"Los Mártires",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Biblioteca Ricaurte",direccion:"Pendiente",fecha:"2 mayo",hora:"1:00 PM"},
+  {localidad:"Los Mártires",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Biblioteca Ricaurte",direccion:"Pendiente",fecha:"2 mayo",hora:"1:00 PM"},
   {localidad:"La Candelaria",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Ivonn Revelo, Juan Pablo",barrio:"La Concordia - Casa Cultural del Zipa",direccion:"CL 9 # 3 - 57",fecha:"28 de abril",hora:""},
-  {localidad:"La Candelaria",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Casa Cultural del Zipa",direccion:"CL 9 # 3 - 57",fecha:"5 de mayo",hora:""},
+  {localidad:"La Candelaria",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Casa Cultural del Zipa",direccion:"CL 9 # 3 - 57",fecha:"5 de mayo",hora:""},
   {localidad:"Antonio Nariño",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Vanessa Henriquez, Erika Barreto",barrio:"Restrepo",direccion:"Salón comunal el Restrepo Trv 24L No 14 - 80",fecha:"8 de mayo",hora:"3:00 PM"},
-  {localidad:"Antonio Nariño",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Restrepo",direccion:"Salón comunal el Restrepo Trv 24L No 14 - 80",fecha:"9 de mayo",hora:"10:00 AM"},
-  {localidad:"Antonio Nariño",modalidad:30,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"12 de mayo",hora:""},
+  {localidad:"Antonio Nariño",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Restrepo",direccion:"Salón comunal el Restrepo Trv 24L No 14 - 80",fecha:"9 de mayo",hora:"10:00 AM"},
+  {localidad:"Antonio Nariño",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"12 de mayo",hora:""},
   {localidad:"Barrios Unidos",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Juan Pablo, Vanessa Henriquez",barrio:"Rionegro",direccion:"CL 94 # 59 - 17",fecha:"30 abril",hora:""},
-  {localidad:"Barrios Unidos",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Rionegro",direccion:"CL 94 # 59 - 17",fecha:"7 mayo",hora:""},
+  {localidad:"Barrios Unidos",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Rionegro",direccion:"CL 94 # 59 - 17",fecha:"7 mayo",hora:""},
   {localidad:"Puente Aranda",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Erika Barreto, Vanessa Henriquez",barrio:"El Jazmín San Eusebio",direccion:"Av. Carrera 50 # 1D 28",fecha:"26 de marzo",hora:"4:00 PM"},
-  {localidad:"Puente Aranda",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"La Ponderosa, El Jazmín y San Eusebio",direccion:"Calle 1B # 52 - 14",fecha:"27 de marzo",hora:"4:00 PM"},
-  {localidad:"Puente Aranda",modalidad:30,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"San Eusebio",direccion:"Av. 1 de Mayo #52 - 13",fecha:"18 abril",hora:"3:00 PM"},
+  {localidad:"Puente Aranda",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"La Ponderosa, El Jazmín y San Eusebio",direccion:"Calle 1B # 52 - 14",fecha:"27 de marzo",hora:"4:00 PM"},
+  {localidad:"Puente Aranda",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"San Eusebio",direccion:"Av. 1 de Mayo #52 - 13",fecha:"18 abril",hora:"3:00 PM"},
   {localidad:"Puente Aranda",modalidad:30,tipo:"PLAYLAB",sesiones:1,enlace:"",barrio:"Cancha Parque San Eusebio",direccion:"Av. Carrera 50 # 1D 28",fecha:"9 mayo",hora:""},
   {localidad:"Puente Aranda",modalidad:30,tipo:"PLAYLAB",sesiones:1,enlace:"",barrio:"Parque Aguaviva, Bochica Central",direccion:"Pendiente",fecha:"16 mayo",hora:""},
   {localidad:"Puente Aranda",modalidad:30,tipo:"PLAYLAB",sesiones:1,enlace:"",barrio:"Parque Ciudad Montes",direccion:"Pendiente",fecha:"24 mayo",hora:""},
   {localidad:"Chapinero",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Vanessa Henriquez, Santiago Mejia",barrio:"San Luis",direccion:"Salón cultural San Luis CLL 97 NO 8 - 25",fecha:"11 de abril",hora:"3:00 PM"},
-  {localidad:"Chapinero",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"San Luis",direccion:"Salón cultural San Luis CLL 97 NO 8 - 25",fecha:"12 abril",hora:"10:00 AM"},
-  {localidad:"Chapinero",modalidad:30,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"Parque El Lago",direccion:"Pendiente",fecha:"2 mayo",hora:""},
+  {localidad:"Chapinero",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"San Luis",direccion:"Salón cultural San Luis CLL 97 NO 8 - 25",fecha:"12 abril",hora:"10:00 AM"},
+  {localidad:"Chapinero",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"Parque El Lago",direccion:"Pendiente",fecha:"2 mayo",hora:""},
   {localidad:"Sumapaz",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Diana Viancha, Erika Barreto",barrio:"Vereda Tunal Alto",direccion:"Gimnasio del Campo Juan de la Cruz Varela",fecha:"25 de marzo",hora:""},
-  {localidad:"Sumapaz",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Vereda Tunal Alto",direccion:"Gimnasio del Campo Juan de la Cruz Varela",fecha:"26 mayo",hora:""},
-  {localidad:"Sumapaz",modalidad:30,tipo:"FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"26 mayo",hora:""},
+  {localidad:"Sumapaz",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Vereda Tunal Alto",direccion:"Gimnasio del Campo Juan de la Cruz Varela",fecha:"26 mayo",hora:""},
+  {localidad:"Sumapaz",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:1,enlace:"",barrio:"",direccion:"",fecha:"26 mayo",hora:""},
   {localidad:"Teusaquillo",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Santiago Mejia, Vanessa Henriquez",barrio:"La Esmeralda",direccion:"Pendiente",fecha:"Mayo",hora:""},
   {localidad:"Tunjuelito",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Erika Barreto, Diana Viancha",barrio:"Pendiente",direccion:"Pendiente",fecha:"Mayo",hora:""},
-  {localidad:"Tunjuelito",modalidad:30,tipo:"ENTRENALAB",sesiones:2,enlace:"",barrio:"Pendiente",direccion:"Pendiente",fecha:"Mayo",hora:""},
+  {localidad:"Tunjuelito",modalidad:30,tipo:"ENTRENALAB_FUSIONLAB",sesiones:2,enlace:"",barrio:"Pendiente",direccion:"Pendiente",fecha:"Mayo",hora:""},
   {localidad:"Santa Fe",modalidad:30,tipo:"ACTIVALAB",sesiones:2,enlace:"Santiago Mejia, Diana Viancha",barrio:"Pendiente",direccion:"Pendiente",fecha:"Mayo",hora:""},
 ];
 
@@ -604,24 +588,15 @@ function enrichFortalecimiento(evs){return evs.map(e=>({...e,parsed:parseDate(e.
 
 // ── TOKENS ────────────────────────────────────────────────────
 const C={bg:"#0B0E14",surface:"#131720",border:"#1E2433",text:"#E2E8F0",textMuted:"#64748B",textDim:"#475569",accent:"#F97316",accentGlow:"rgba(249,115,22,0.15)"};
+// 3 categorías (2026-08-26, Google Sheets retirado): Activalab, Sesión 2
+// (Entrenalab/Fusionlab fusionados) y Playlab -- este último absorbe Réplica,
+// Recreolab Express y Recreolab Express + laboratorio (ver claseDesdeFaseSubtipo).
 const TIPO={
-  // ── existentes (fuente Google Sheets, se mantienen mientras dure el fallback) ──
   ACTIVALAB:{bg:"#F97316",glow:"rgba(249,115,22,0.2)",icon:"⚡",label:"Activa"},
-  ENTRENALAB:{bg:"#06B6D4",glow:"rgba(6,182,212,0.2)",icon:"🏋️",label:"Entrena"},
-  FUSIONLAB:{bg:"#A855F7",glow:"rgba(168,85,247,0.2)",icon:"🎭",label:"Fusión"},
-  PLAYLAB:{bg:"#EF4444",glow:"rgba(239,68,68,0.2)",icon:"🎲",label:"Play"},
-  // ── nuevos (fuente SharePoint, ver csvToEventosMatriz) ──
   ENTRENALAB_FUSIONLAB:{bg:"#8B5CF6",glow:"rgba(139,92,246,0.2)",icon:"🔥",label:"Entrena/Fusión"},
-  REPLICA:{bg:"#22C55E",glow:"rgba(34,197,94,0.2)",icon:"🔁",label:"Réplica"},
-  RECREOLAB_EXPRESS:{bg:"#FACC15",glow:"rgba(250,204,21,0.2)",icon:"🚀",label:"Express"},
-  EVENTO_ESPECIAL:{bg:"#EC4899",glow:"rgba(236,72,153,0.2)",icon:"✨",label:"Especial"},
+  PLAYLAB:{bg:"#EF4444",glow:"rgba(239,68,68,0.2)",icon:"🎲",label:"Play"},
 };
-// Subconjunto de TIPO que se muestra como chip de filtro en el tab Recreolab (2026-08-10) --
-// ENTRENALAB y FUSIONLAB (fuente Google Sheets, fallback) se sacaron de esta lista a
-// propósito, NO del objeto TIPO -- sus eventos siguen pintándose con su color/ícono
-// correcto (vía TIPO[ev.tipo]) y siguen contando en "Todos" y en el panel de stats,
-// solo no tienen un botón dedicado para aislarlos.
-const TIPO_CHIPS = ["ACTIVALAB","ENTRENALAB_FUSIONLAB","PLAYLAB","REPLICA","RECREOLAB_EXPRESS","EVENTO_ESPECIAL"];
+const TIPO_CHIPS = ["ACTIVALAB","ENTRENALAB_FUSIONLAB","PLAYLAB"];
 const MFULL=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
 const DNAMES=["D","L","M","M","J","V","S"];
 
@@ -638,6 +613,7 @@ function EventCard({ev,expanded=false}){
       <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
         <div style=${{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
           <span style=${{padding:"3px 8px",borderRadius:6,background:t.bg,color:"#fff",fontSize:10,fontWeight:800,boxShadow:"0 1px 4px "+t.glow}}>${t.icon} ${ev.tipo}</span>
+          ${ev.tipo==="PLAYLAB"&&ev.detalle&&!/^playlab/i.test(ev.detalle)&&html`<span style=${{padding:"3px 8px",borderRadius:6,background:C.surface,color:"#FACC15",fontSize:10,fontWeight:700,border:"1px solid "+C.border}}>${ev.detalle}</span>`}
           <span style=${{padding:"3px 8px",borderRadius:6,background:C.surface,color:C.text,fontSize:10,fontWeight:600,border:"1px solid "+C.border}}>${ev.localidad}</span>
           <span style=${{fontSize:10,color:C.textDim,fontWeight:600,fontFamily:"'JetBrains Mono'"}}>${ev.sesiones}s</span>
         </div>
@@ -802,13 +778,12 @@ function App(){
       if(result){
         if(result.text.length>500_000){setEvents(enrichEvents(FALLBACK));setSource("offline");return;}
         const lines=parseCSV(result.text);
-        // Guarda pensada para el formato ancho (Google Sheets, ~20 filas reales) --
-        // el formato tidy de SharePoint es 1 fila por evento, así que con volumen
-        // real de OAL este límite se puede alcanzar antes de lo que parece. Si
-        // "live-sharepoint" empieza a caer a offline sin motivo aparente, revisar
-        // este número primero.
+        // Circuit breaker de seguridad -- formato tidy es 1 fila por evento, así
+        // que con volumen real de OAL este límite se puede alcanzar antes de lo
+        // que parece. Si "live-sharepoint" empieza a caer a offline sin motivo
+        // aparente, revisar este número primero.
         if(lines.length>500){setEvents(enrichEvents(FALLBACK));setSource("offline");return;}
-        const parsed = result.source==="live-sharepoint" ? csvToEventosMatriz(lines) : csvToEvents(lines);
+        const parsed = csvToEventosMatriz(lines);
         setDebug("Filas: "+lines.length+", eventos: "+parsed.length);
         if(parsed.length>0){setEvents(enrichEvents(parsed));setSource(result.source);return;}
       }
@@ -885,9 +860,9 @@ function App(){
 
   const stats=useMemo(()=>{const s={};for(const t of Object.keys(TIPO))s[t]=filtered.filter(e=>e.tipo===t).length;return s;},[filtered]);
 
-  const statusColor=source==="live-sharepoint"?"#22C55E":source==="live"?"#22C55E":source==="csv"?"#06B6D4":source==="loading"?C.textMuted:"#EF4444";
-  const statusBg=source==="live-sharepoint"?"rgba(34,197,94,0.12)":source==="live"?"rgba(34,197,94,0.12)":source==="csv"?"rgba(6,182,212,0.12)":source==="loading"?"rgba(100,116,139,0.12)":"rgba(239,68,68,0.12)";
-  const statusLabel=source==="loading"?"Cargando...":source==="live-sharepoint"?"EN VIVO":source==="live"?"EN VIVO (Sheets)":source==="csv"?"CSV":"OFFLINE";
+  const statusColor=source==="live-sharepoint"?"#22C55E":source==="loading"?C.textMuted:"#EF4444";
+  const statusBg=source==="live-sharepoint"?"rgba(34,197,94,0.12)":source==="loading"?"rgba(100,116,139,0.12)":"rgba(239,68,68,0.12)";
+  const statusLabel=source==="loading"?"Cargando...":source==="live-sharepoint"?"EN VIVO":"OFFLINE";
 
   const TABS=[
     {k:"recreo",icon:"📅",label:"Recreolab",clr:C.accent,bg:C.accentGlow},
@@ -995,17 +970,10 @@ function App(){
               </div>`}
             <div style=${{padding:"12px 16px 20px"}}>
               <div style=${{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
-                ${TIPO_CHIPS.map(k=>{const v=TIPO[k];
-                  // ENTRENALAB/FUSIONLAB (fuente Google Sheets, fallback) no tienen tarjeta
-                  // propia -- mismo criterio que los chips de filtro (ver TIPO_CHIPS) -- pero
-                  // sus eventos NO desaparecen del conteo: se suman acá dentro de la tarjeta
-                  // "Entrena-Fusión", que conceptualmente es el mismo tipo aunque venga de una
-                  // fuente que todavía no los fusiona.
-                  const extra = k==="ENTRENALAB_FUSIONLAB" ? (stats.ENTRENALAB||0)+(stats.FUSIONLAB||0) : 0;
-                  return html`
+                ${TIPO_CHIPS.map(k=>{const v=TIPO[k];return html`
                   <div key=${k} style=${{background:C.surface,borderRadius:10,padding:"10px 8px",textAlign:"center",border:"1px solid "+C.border}}>
                     <div style=${{fontSize:16}}>${v.icon}</div>
-                    <div style=${{fontSize:20,fontWeight:800,color:v.bg,fontFamily:"'JetBrains Mono'"}}>${(stats[k]||0)+extra}</div>
+                    <div style=${{fontSize:20,fontWeight:800,color:v.bg,fontFamily:"'JetBrains Mono'"}}>${stats[k]||0}</div>
                     <div style=${{fontSize:8,color:C.textMuted,fontWeight:700,letterSpacing:"0.5px",marginTop:1}}>${k}</div>
                   </div>`;})}
               </div>
@@ -1361,7 +1329,7 @@ function App(){
         </div>`}
 
       <div style=${{padding:"8px 20px 20px",textAlign:"center"}}>
-        <p style=${{fontSize:10,color:C.textDim}}>${events.length} Recreolab · ${PARQUES_SEG.length} Parques · ${talleresEnriched.length} Talleres${talleresSource==="live"?" (en vivo)":talleresSource==="offline"?" (offline)":""} · ${retosEvents.length} Retos · ${fortalecimientoEnriched.length} Fortalecimiento${fortalecimientoSource==="live"?" (en vivo)":fortalecimientoSource==="offline"?" (offline)":""} · ${source==="live-sharepoint"?"SharePoint (en vivo)":source==="live"?"Google Sheets (en vivo)":source==="csv"?"CSV":"datos embebidos"}</p>
+        <p style=${{fontSize:10,color:C.textDim}}>${events.length} Recreolab · ${PARQUES_SEG.length} Parques · ${talleresEnriched.length} Talleres${talleresSource==="live"?" (en vivo)":talleresSource==="offline"?" (offline)":""} · ${retosEvents.length} Retos · ${fortalecimientoEnriched.length} Fortalecimiento${fortalecimientoSource==="live"?" (en vivo)":fortalecimientoSource==="offline"?" (offline)":""} · ${source==="live-sharepoint"?"SharePoint (en vivo)":"datos embebidos"}</p>
       </div>
     </div>`;
 }
