@@ -1,11 +1,32 @@
-ID_Registro,Localidad,Nombre_Iniciativa_o_Evento,Fecha_Programada,Hora_inicio,Hora_cierre,Barrio,Dirección,Lugar_Especifico
-PLA-BOS-002,BOS,Des-Amor-tigüando Mitos,2026-08-19,9:00am,12:00pm,Bosa Carbonell / Carlos Albán,Calle 72 sur 79 d - 33,Bosa Carbonell a colegio Carlos Albán Holguín Sede A
-PLA-USM-001,USM,TEJIENDO TRADICIONALES A TRAVÉS DEL JUEGO,2026-08-22,2:00pm,5:00pm,"Marichuela, Almirante Padilla, Yomasa",Dg. 76b Sur # 1c-40,Plazoleta de la Biblioteca La Marichuela (Plazoleta Cultural)
-PLA-TEU-001,TEU,Unidos somos más equipo,2026-08-22,9:00am,12:00pm,Quinta Paredes,Carrera 44B # 22-65,Parque Cádiz
-PLA-MAR-001,MAR,Juegos del pasado presente y comunidad de hoy,2026-08-28,1:30pm,5:00pm,Santa Isabel,Calle 1g con  Carrera 27a,Parque Santa Isabel
-PLA-SUB-003,SUB,El Tejer del Viento,2026-08-30,11:00am,16:00,San Jorge,Cll 127 C con Cra 87 A,Tanque del Indio - Parque Las Cometas
-PLA-FON-001,FON,Jugando Unidos por la Cabaña,2026-09-05,8:00am,1:00pm,La Cabaña,Carrera 104B # 23G - 17,Parque La Cabaña
-PLA-TUN-001,TUN,Por definir,2026-09-05,Por definir,,Por definir,Por definir,Por definir
-PLA-FON-2026-08-22,FON,"Cambulos y Gualandays  "" Enamorémonos de nuestro barrio """,2026-08-22,9:00am,12:00pm,Los Cambulos,Calle 23G  # 108 - 32,Parque Los Cambulos
-PLA-TUN-2026-08-30,TUN,"Vive Venecia ""Un territorio que renace y enaltece""",2026-08-30,09:00,13:00,Venecia,dgnal 49sur # 53a 92,parque proximidad Venecia
-PLA-TUN-2026-09-05,TUN,Un día de felicidad,2026-09-05,09:00,13:00,San Carlos,dgnal 51b sur con Cra 18b.,Parque proximidad San Carlos
+ID_Registro,Localidad,Fase_o_Subtipo,Nombre_Iniciativa_o_Evento,Fecha_Programada,Hora_inicio,Hora_cierre,Barrio,Dirección,Lugar_Especifico
+PLA-BOS-002,BOS,Playlab (Iniciativa),Des-Amor-tigüando Mitos,2026-08-19,9:00am,12:00pm,Bosa Carbonell / Carlos Albán,Calle 72 sur 79 d - 33,Bosa Carbonell a colegio Carlos Albán Holguín Sede A
+PLA-USM-001,USM,Playlab (Iniciativa),TEJIENDO TRADICIONALES A TRAVÉS DEL JUEGO,2026-08-22,2:00pm,5:00pm,"Marichuela, Almirante Padilla, Yomasa",Dg. 76b Sur # 1c-40,Plazoleta de la Biblioteca La Marichuela (Plazoleta Cultural)
+PLA-TEU-001,TEU,Playlab (Iniciativa),Unidos somos más equipo,2026-08-22,9:00am,12:00pm,Quinta Paredes,Carrera 44B # 22-65,Parque Cádiz
+PLA-MAR-001,MAR,Playlab (Iniciativa),Juegos del pasado presente y comunidad de hoy,2026-08-28,1:30pm,5:00pm,Santa Isabel,Calle 1g con  Carrera 27a,Parque Santa Isabel
+PLA-SUB-003,SUB,Playlab (Iniciativa),El Tejer del Viento,2026-08-30,11:00am,16:00,San Jorge,Cll 127 C con Cra 87 A,Tanque del Indio - Parque Las Cometas
+PLA-FON-001,FON,Playlab (Iniciativa),Jugando Unidos por la Cabaña,2026-09-05,8:00am,1:00pm,La Cabaña,Carrera 104B # 23G - 17,Parque La Cabaña
+PLA-FON-002,FON,Playlab (Iniciativa),"Cambulos y Gualandays  "" Enamorémonos de nuestro barrio """,2026-08-22,9:00am,12:00pm,Los Cambulos,Calle 23G  # 108 - 32,Parque Los Cambulos
+PLA-TUN-001,TUN,Playlab (Iniciativa),"Vive Venecia ""Un territorio que renace y enaltece""",2026-08-30,09:00,13:00,Venecia,dgnal 49sur # 53a 92,parque proximidad Venecia
+PLA-TUN-002,TUN,Playlab (Iniciativa),Un día de felicidad,2026-09-05,09:00,13:00,San Carlos,dg 51b sur con Cra 18b.,Parque proximidad San Carlos
+ACT-CHA-001,CHA,Activalab,N/A,2026-09-03,6:30  p.m.,,Chapinero Central,Calle 59bis # 8-15,Edificio Academia 59
+ACT-KEN-001,KEN,Activalab,N/A,2026-09-04,5:00 p.m.,,Villas de Kennedy,Carrera 81D #54-31 sur,Salón comunal Villas de Kennedy
+,SCR,Activalab,N/A,,,,,,
+,BOS,Activalab,N/A,,,,,,
+,BAR,Activalab,N/A,,,,,,
+,USM,Activalab,N/A,,,,,,
+,FON,Activalab,N/A,,,,,,
+,ANT,Activalab,N/A,,,,,,
+ACT-TEU-001,TEU,Activalab,N/A,2026-09-06,10:00,12:00am,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
+,MAR,Activalab,N/A,,,,,,
+,CHA,Playlab (Iniciativa),"Los juegos tradicionales ""El encuentro del ayer y hoy con la montaña""",2026-09-19,09:00,,Bosques de Bella Vista,Carrera 1 A este # 101 -86 / Bosques de Bella Vista,Cuadra frente al polideportivo
+,CHA,Entrenalab,N/A,2026-09-10,6:30  p.m.,,Chapinero Central,Calle 59bis # 8-16,Edificio Academia 59
+,KEN,Entrenalab,N/A,2026-09-11,6:00 p.m.,,Tintalito I sector,Calle 42G sur con 86C,Salón comunal Tintalito I sector
+,SCR,Entrenalab,N/A,,,,,,
+,BOS,Entrenalab,N/A,,,,,,
+,BAR,Entrenalab,N/A,,,,,,
+,USM,Entrenalab,N/A,,,,,,
+,FON,Entrenalab,N/A,,,,,,
+,ANT,Entrenalab,N/A,,,,,,
+,TEU,Entrenalab,N/A,2026-09-13,10:00,,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
+,MAR,Entrenalab,N/A,,,,,,
+,USM,Playlab (Iniciativa),Unidos Somos Mas,2026-09-20,09:00,13:00,El Tuno,,
