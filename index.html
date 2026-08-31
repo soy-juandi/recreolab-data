@@ -210,7 +210,7 @@ const TIPO_PREFIX_MAP = {
 function claseDesdeFaseSubtipo(fase) {
   const f = (fase || "").trim();
   if (/^sesión\s*1|^activalab$/i.test(f)) return "ACTIVALAB";
-  if (/^sesión\s*2|entrenalab.*fusionlab/i.test(f)) return "ENTRENALAB_FUSIONLAB";
+  if (/^sesión\s*2|entrenalab/i.test(f)) return "ENTRENALAB_FUSIONLAB";
   return "PLAYLAB";
 }
 
