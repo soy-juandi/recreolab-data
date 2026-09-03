@@ -13,8 +13,8 @@ ACT-KEN-001,KEN,Activalab,N/A,2026-09-04,5:00 p.m.,,Villas de Kennedy,Carrera 81
 ,SCR,Activalab,N/A,,,,,,
 ,BOS,Activalab,N/A,,,,,,
 ,BAR,Activalab,N/A,,,,,,
-,USM,Activalab,N/A,2026-09-18,,,,,
-,FON,Activalab,N/A,,,,,,
+,USM,Activalab,N/A,2026-09-18,15:00,17:00,Los Tejares,Carrera 8B #75B - 17 Sur.,Parque Desarrollo Santa Librada - los Tejares 05-512
+,FON,Activalab,N/A,2026-09-09,5:00 p.m.,,Belén,Calle 17B # 107-32,Salón comunal de Belén
 ,ANT,Activalab,N/A,2026-09-19,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salon Comunal Policarpa
 ACT-TEU-001,TEU,Activalab,N/A,2026-09-06,10:00,12:00am,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
 ,MAR,Activalab,N/A,,,,,,
@@ -24,21 +24,33 @@ ACT-TEU-001,TEU,Activalab,N/A,2026-09-06,10:00,12:00am,La soledad,Carrera 19#39b
 ,SCR,Entrenalab,N/A,,,,,,
 ,BOS,Entrenalab,N/A,,,,,,
 ,BAR,Entrenalab,N/A,,,,,,
-,USM,Entrenalab,N/A,2026-09-25,,,,,
-,FON,Entrenalab,N/A,,,,,,
+,USM,Entrenalab,N/A,2026-09-24,15:00,17:00,Los Tejares,Carrera 8B #75B - 17 Sur.,Parque Desarrollo Santa Librada - los Tejares 05-512
+,FON,Entrenalab,N/A,2026-09-16,5:00 p.m.,,Belén,Calle 17B # 107-32,Salón comunal de Belén
 ,ANT,Entrenalab,N/A,2026-09-26,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salon Comunal Policarpa
 ,TEU,Entrenalab,N/A,2026-09-13,10:00,,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
 ,MAR,Entrenalab,N/A,,,,,,
 ,USM,Playlab (Iniciativa),Unidos somos mas,2026-09-20,09:00,13:00,El Tuno,Calle 117 a sur # 0 - 58,Campo deportivo
-,USM,Playlab (Iniciativa) 1,N/A,,,,,,
-,USM,Playlab (Iniciativa) 2,N/A,,,,,,
-,FON,Playlab (Iniciativa) 1,N/A,2026-09-09,5:00 p.m.,,Belén,Calle 17B # 107-32,Salón comunal de Belén
-,FON,Playlab (Iniciativa) 2,N/A,2026-09-16,5:00 p.m.,,Belén,Calle 17B # 107-32,Salón comunal de Belén
-,ANT,Playlab (Iniciativa) 1,N/A,,,,,,
-,ANT,Playlab (Iniciativa) 2,N/A,,,,,,
-,TEU,Playlab (Iniciativa) 1,N/A,,,,,,
-,TEU,Playlab (Iniciativa) 2,N/A,,,,,,
-,SUB,Activalab,N/A,,,,,,
-,SUB,Entrenalab,N/A,,,,,,
-,SUB,Playlab (Iniciativa) 1,N/A,,,,,,
-,SUB,Playlab (Iniciativa) 2,N/A,,,,,,
+,USM,Playlab (Iniciativa),N/A,,,,,,
+,USM,Playlab (Iniciativa),N/A,,,,,,
+,ANT,Playlab (Iniciativa),N/A,,,,,,
+,ANT,Playlab (Iniciativa),N/A,,,,,,
+,TEU,Playlab (Iniciativa),N/A,,,,,,
+,TEU,Playlab (Iniciativa),N/A,,,,,,
+,SUB,Sesión 1: Activalab,N/A,,,,,,
+,SUB,Sesión 2: Entrenalab / Fusionlab,N/A,,,,,,
+,SUB,Playlab (Iniciativa),N/A,,,,,,
+,SUB,Playlab (Iniciativa),N/A,,,,,,
+,CHA,Sesión 1:Activalab,N/A,2026-09-03,6:30  p.m.,,Chapinero Central,Calle 59bis # 8-15,Edificio Academia 59
+,CHA,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-10,6:30  p.m.,,Chapinero Central,Calle 59bis # 8-16,Edificio Academia 59
+,KEN,Sesión 1:Activalab,N/A,2026-09-04,5:00 p.m.,,Villas de Kennedy,Carrera 81D #54-31 sur,Salón comunal Villas de Kennedy
+,KEN,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-11,6:00 p.m.,,Tintalito I sector,Calle 42G sur con 86C,Salón comunal Tintalito I sector
+,USM,Sesión 1:Activalab,N/A,2026-09-18,,,,,
+,USM,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-25,,,,,
+,FON,Sesión 1:Activalab,N/A,2026-09-09,17:00,,Belén,Calle 17B # 107-32,Salón comunal de Belén
+,FON,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-16,17:00,,Belén,Calle 17B # 107-32,Salón comunal de Belén
+,ANT,Sesión 1:Activalab,N/A,2026-09-19,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salon Comunal Policarpa
+,ANT,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-26,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salon Comunal Policarpa
+,TEU,Sesión 1:Activalab,N/A,2026-09-06,10:00,,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
+,TEU,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-13,10:00,,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
+,SUB,Sesión 1:Activalab,N/A,,,,,,
+,SUB,Sesión 2:Entrenalab / Fusionlab,N/A,,,,,,
