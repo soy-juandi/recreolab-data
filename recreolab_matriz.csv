@@ -13,9 +13,9 @@ ACT-KEN-001,KEN,Activalab,N/A,2026-09-04,5:00 p.m.,,Villas de Kennedy,Carrera 81
 ,SCR,Activalab,N/A,,,,,,
 ,BOS,Activalab,N/A,,,,,,
 ,BAR,Activalab,N/A,,,,,,
-,USM,Activalab,N/A,,,,,,
-,FON,Activalab,N/A,,,,Belén,Calle 17B # 107-32,Salón comunal de Belén
-,ANT,Activalab,N/A,,,,,,
+,USM,Activalab,N/A,2026-09-18,,,,,
+,FON,Activalab,N/A,,,,,,
+,ANT,Activalab,N/A,2026-09-19,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salon Comunal Policarpa
 ACT-TEU-001,TEU,Activalab,N/A,2026-09-06,10:00,12:00am,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
 ,MAR,Activalab,N/A,,,,,,
 ,CHA,Playlab (Iniciativa),"Los juegos tradicionales ""El encuentro del ayer y hoy con la montaña""",2026-09-19,09:00,,Bosques de Bella Vista,Carrera 1 A este # 101 -86 / Bosques de Bella Vista,Cuadra frente al polideportivo
@@ -24,9 +24,21 @@ ACT-TEU-001,TEU,Activalab,N/A,2026-09-06,10:00,12:00am,La soledad,Carrera 19#39b
 ,SCR,Entrenalab,N/A,,,,,,
 ,BOS,Entrenalab,N/A,,,,,,
 ,BAR,Entrenalab,N/A,,,,,,
-,USM,Entrenalab,N/A,,,,,,
-,FON,Entrenalab,N/A,,,,Belén,Calle 17B # 107-32,
-,ANT,Entrenalab,N/A,,,,,,
+,USM,Entrenalab,N/A,2026-09-25,,,,,
+,FON,Entrenalab,N/A,,,,,,
+,ANT,Entrenalab,N/A,2026-09-26,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salon Comunal Policarpa
 ,TEU,Entrenalab,N/A,2026-09-13,10:00,,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
 ,MAR,Entrenalab,N/A,,,,,,
-,USM,Playlab (Iniciativa),Unidos Somos Mas,2026-09-20,09:00,13:00,El Tuno,Calle 117 a sur # 0 - 58,Campo deportivo
+,USM,Playlab (Iniciativa),Unidos somos mas,2026-09-20,09:00,13:00,El Tuno,Calle 117 a sur # 0 - 58,Campo deportivo
+,USM,Playlab (Iniciativa) 1,N/A,,,,,,
+,USM,Playlab (Iniciativa) 2,N/A,,,,,,
+,FON,Playlab (Iniciativa) 1,N/A,2026-09-09,5:00 p.m.,,Belén,Calle 17B # 107-32,Salón comunal de Belén
+,FON,Playlab (Iniciativa) 2,N/A,2026-09-16,5:00 p.m.,,Belén,Calle 17B # 107-32,Salón comunal de Belén
+,ANT,Playlab (Iniciativa) 1,N/A,,,,,,
+,ANT,Playlab (Iniciativa) 2,N/A,,,,,,
+,TEU,Playlab (Iniciativa) 1,N/A,,,,,,
+,TEU,Playlab (Iniciativa) 2,N/A,,,,,,
+,SUB,Activalab,N/A,,,,,,
+,SUB,Entrenalab,N/A,,,,,,
+,SUB,Playlab (Iniciativa) 1,N/A,,,,,,
+,SUB,Playlab (Iniciativa) 2,N/A,,,,,,
