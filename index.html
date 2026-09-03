@@ -501,10 +501,11 @@ const PARQUE_CLR = {
 // ── TALLERES ──────────────────────────────────────────────────
 // Red de seguridad si TALLERES_CSV_URL falla o no hay conexión
 const TALLERES_FALLBACK = [
-  {taller:"Grupo 1 – Sesión 1",fecha:"5 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:1,sesion:1},
-  {taller:"Grupo 2 – Sesión 1",fecha:"8 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:2,sesion:1},
-  {taller:"Grupo 1 – Sesión 2",fecha:"12 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:1,sesion:2},
-  {taller:"Grupo 2 – Sesión 2",fecha:"15 de mayo",hora:"9:00 AM",lugar:"IDRD - Salón A",participantes:"Equipos IDRD",grupo:2,sesion:2},
+  // 2026-09-02: reemplazadas las 4 sesiones viejas de mayo (ya pasadas) por
+  // el taller real vigente, pedido por Juan.
+  {taller:"Líderes que juegan, comunidades que sanan – Sesión 1",fecha:"5 de septiembre",hora:"9:00 AM – 12:00 M",lugar:"IDRD",participantes:"Comunidad",grupo:1,sesion:1},
+  {taller:"Líderes que juegan, comunidades que sanan – Sesión 2",fecha:"19 de septiembre",hora:"9:00 AM – 12:00 M",lugar:"IDRD",participantes:"Comunidad",grupo:1,sesion:2},
+  {taller:"Líderes que juegan, comunidades que sanan – Sesión 3",fecha:"26 de septiembre",hora:"9:00 AM – 12:00 M",lugar:"IDRD",participantes:"Comunidad",grupo:1,sesion:3},
 ];
 
 const TALLER_CLR = {
@@ -533,18 +534,33 @@ const FORTALECIMIENTO_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/re
 // cambio (no datos inventados; se van a desactualizar con el tiempo igual que
 // cualquier fallback, se refresca cuando haga falta).
 const FORTALECIMIENTO_FALLBACK = [
+  {tipo:"DRAFE", localidad:"Distrital", actividad:"Congreso DRAFE", fecha:"2026-09-25", hora:"7:00 AM – 5:00 PM", direccion:"IDRD - Calle 63 # 59A - 06"},
+  {tipo:"DRAFE", localidad:"Suba", actividad:"Festival Toma al Parque DRAFE Suba", fecha:"2026-09-17", hora:"9:00 AM – 12:00 PM", direccion:"Parque Lombardía - Calle 143 con Carrera 109", mapsUrl:"https://maps.app.goo.gl/uuy75sTe4zdnhf5L8?g_st=aw"},
+  {tipo:"DRAFE", localidad:"Chapinero", actividad:"Carteleras Vivas Comunitarias DRAFE", fecha:"2026-09-18", hora:"3:00 PM – 5:00 PM", direccion:"Parque Pardo Rubio - Tv. 3 Bis Este #47b-1", mapsUrl:"https://maps.app.goo.gl/vztcUS5AFowzi7od6"},
   {tipo:"DRAFE", localidad:"Santa Fe", actividad:"DRAFE FESTI SANTA FE - EL CORAZON LATE CON DEPORTE", fecha:"2026-09-05", hora:"8:00 AM – 12:00 PM", direccion:"Colegio Aulas Colombianas Carrera 12 A Este No. 3 - 57 S", mapsUrl:"https://maps.app.goo.gl/qoSqt6cNrCMSCRCt6"},
   {tipo:"DRAFE", localidad:"Engativá", actividad:"CABILDO RECREODEPORTIVO DRAFE ENGATIVÁ", fecha:"2026-09-05", hora:"8:00 AM – 12:00 PM", direccion:"Barrio villas de granada- Calle 77 No. 112 - 50", mapsUrl:"https://maps.app.goo.gl/JHhQFcsdLxF5uTSs5"},
   {tipo:"DRAFE", localidad:"La Candelaria", actividad:"TEJIENDO COMUNIDAD CON EL DRAFE", fecha:"2026-09-06", hora:"8:00 AM – 1:00 PM", direccion:"Carrera 6 No. 6B- 99", mapsUrl:"https://maps.app.goo.gl/TsiRjsxrQTbqFTTt5"},
   {tipo:"DRAFE", localidad:"Rafael Uribe Uribe", actividad:"DRAFE EN ACCIÓN", fecha:"2026-09-12", hora:"9:00 AM – 12:00 PM", direccion:"Calle 40 Sur con Carrera 10A", mapsUrl:"https://maps.app.goo.gl/NpRgra6unDiaBhNaA"},
   {tipo:"DRAFE", localidad:"Santa Fe", actividad:"DRAFE FESTI SANTA FE - EL CORAZON LATE CON DEPORTE", fecha:"2026-09-12", hora:"8:00 AM – 2:00 PM", direccion:"Polideportivo las Cruces", mapsUrl:"https://maps.app.goo.gl/HbFMRtvmHSSZ23XG8"},
   {tipo:"DRAFE", localidad:"Bosa", actividad:"DRAFE CONECTANDO BOSA", fecha:"2026-09-12", hora:"9:00 AM – 1:00 PM", direccion:"Calle 75 Bis Sur y Calle 78 Sur y entre Carreras 79 y 80J", mapsUrl:"https://maps.app.goo.gl/yvPfTFxaLFutrGscA"},
+  // 2026-09-01: agregadas las sesiones de Fortalecimiento (cronograma_drafe_fortalecimiento.xlsx,
+  // SharePoint) -- Juan pidió combinar ambas fuentes en el mismo tab. Mismo criterio de
+  // "no inventar datos": leído en vivo del Excel, solo las sesiones futuras a esa fecha.
+  {tipo:"FORTALECIMIENTO", localidad:"Virtual", actividad:"Módulo 4 - Veeduría en acción", fecha:"2026-09-02", hora:"5:00 PM – 6:00 PM"},
+  {tipo:"FORTALECIMIENTO", localidad:"Virtual", actividad:"Módulo 4 - Veeduría en acción", fecha:"2026-09-09", hora:"5:00 PM – 7:00 PM"},
+  {tipo:"FORTALECIMIENTO", localidad:"Virtual", actividad:"Módulo 5 - Marco lógico y pensamiento sistémico", fecha:"2026-09-16", hora:"5:00 PM – 6:00 PM"},
+  {tipo:"FORTALECIMIENTO", localidad:"Virtual", actividad:"Módulo 5 - Marco lógico y pensamiento sistémico", fecha:"2026-09-23", hora:"5:00 PM – 7:00 PM"},
+  {tipo:"FORTALECIMIENTO", localidad:"Virtual", actividad:"Módulo 5 - Encontrando el Verdadero Reto", fecha:"2026-09-30", hora:"5:00 PM – 6:00 PM"},
+  {tipo:"FORTALECIMIENTO", localidad:"IDRD Sala B", actividad:"Módulo 6 - Del reto a la transformación", fecha:"2026-10-01", hora:"3:00 PM – 6:00 PM", direccion:"Calle 63 # 59A - 06"},
+  {tipo:"FORTALECIMIENTO", localidad:"IDRD Sala B", actividad:"Módulo 7 - Empatía, liderazgo y adaptabilidad", fecha:"2026-10-07", hora:"3:00 PM – 6:00 PM", direccion:"Calle 63 # 59A - 06"},
 ];
 
 // Morado, no verde: Parques ya usa #22C55E en la vista Combinada -- mismo color
 // para dos fuentes distintas confundiría los puntos/leyenda cuando se combinan.
+// Índigo para Fortalecimiento -- distinto de ambos para no confundirse en la tarjeta.
 const FORTALECIMIENTO_CLR = {
   "DRAFE": {bg:"#A855F7", glow:"rgba(168,85,247,0.2)"},
+  "FORTALECIMIENTO": {bg:"#6366F1", glow:"rgba(99,102,241,0.2)"},
 };
 
 // ── PARSING ───────────────────────────────────────────────────
@@ -675,7 +691,7 @@ function FortalecimientoCard({ev}){
     <div class="card-hover" style=${{background:C.bg,borderRadius:12,padding:"12px 14px",marginBottom:6,border:"1px solid "+C.border,borderLeft:"3px solid "+clr.bg}}>
       <div style=${{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
         <div style=${{display:"flex",gap:5,alignItems:"center",flexWrap:"wrap"}}>
-          <span style=${{padding:"3px 8px",borderRadius:6,background:clr.bg,color:"#fff",fontSize:10,fontWeight:800,boxShadow:"0 1px 4px "+clr.glow}}>🌱 DRAFE</span>
+          <span style=${{padding:"3px 8px",borderRadius:6,background:clr.bg,color:"#fff",fontSize:10,fontWeight:800,boxShadow:"0 1px 4px "+clr.glow}}>${ev.tipo==="FORTALECIMIENTO"?"📚 FORTALECIMIENTO":"🌱 DRAFE"}</span>
           <span style=${{padding:"3px 8px",borderRadius:6,background:C.surface,color:C.text,fontSize:10,fontWeight:600,border:"1px solid "+C.border}}>${ev.localidad}</span>
         </div>
         <span style=${{fontSize:10,color:C.textDim,fontFamily:"'JetBrains Mono'"}}>${ev.hora}</span>
