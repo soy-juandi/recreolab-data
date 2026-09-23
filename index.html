@@ -302,6 +302,52 @@ function csvToEventosMatriz(lines) {
   return events;
 }
 
+// ── Overrides manuales de Recreolab Matriz (2026-09-23) ──────────────────
+// El pipeline automático (Power Automate -> recreolab_matriz.csv) viene sin
+// traer datos reales para ciertas filas de Playlab pese a 3 syncs seguidos
+// (20/22/23-sep) -- quedan como placeholder vacío (N/A, sin fecha) o faltan
+// directamente. No se encontró bug en el Office Script (ver
+// office-script-recreolab-matriz.ts): lee bien la cantidad de filas, el
+// problema está upstream (Excel/SharePoint), sin causa raíz confirmada.
+//
+// Esta capa NO es un fallback (como FORTALECIMIENTO_FALLBACK): el fetch del
+// CSV funciona bien, el problema es que ciertas filas puntuales vienen mal.
+// aplicarOverridesMatriz() se mete en el vivo, entrada por entrada, después
+// de parsear: si encuentra un evento existente con la misma clave
+// (localidad+tipo+fecha) que luce como placeholder (sin nombre real), lo
+// reemplaza por el override; si no encuentra esa clave, lo agrega. Si el
+// pipeline algún día trae la fila real con nombre poblado para esa misma
+// clave, el override deja de aplicarse solo (no hace falta acordarse de
+// borrarlo) -- pero conviene borrarlo igual cuando eso pase, para no dejar
+// basura muerta en el código.
+const RECREOLAB_MATRIZ_OVERRIDES = [
+  {localidad:"Chapinero", tipo:"PLAYLAB", detalle:"Playlab (Iniciativa) 1", sesiones:1, enlace:"", gestores:"",
+   nombre:"Póngase en los chapines del otro", barrio:"Chapinero Central", direccion:"Calle 60 #7-49",
+   lugar:"Parque Hippies", fecha:"2026-09-26", hora:"3:00 PM"},
+  {localidad:"Teusaquillo", tipo:"PLAYLAB", detalle:"Playlab (Iniciativa)", sesiones:1, enlace:"", gestores:"",
+   nombre:"Teusaquillo DA DI PARK", barrio:"Alfonso López", direccion:"Calle 50 con Carrera 21",
+   lugar:"Parque Alfonso López", fecha:"2026-09-26", hora:"9:00 AM"},
+  // Barrios Unidos 2026-09-26: confirmado con Juan que no hay evento ahí ese día
+  // (la fila vacía que aparecía en el CSV era un cupo sin usar, no un dato perdido).
+];
+
+function aplicarOverridesMatriz(eventos) {
+  const clave = e => (e.localidad || "").toLowerCase() + "|" + (e.tipo || "") + "|" + (e.fecha || "");
+  const esPlaceholder = e => !e.nombre || e.nombre === "N/A" || !e.fecha;
+  const resultado = eventos.slice();
+  for (const ov of RECREOLAB_MATRIZ_OVERRIDES) {
+    const k = clave(ov);
+    const idx = resultado.findIndex(e => clave(e) === k);
+    if (idx === -1) {
+      resultado.push(ov);
+    } else if (esPlaceholder(resultado[idx])) {
+      resultado[idx] = ov;
+    }
+    // si existe y NO es placeholder, el pipeline ya trajo el dato real -- se respeta, no se pisa.
+  }
+  return resultado;
+}
+
 function parseRetosCSV(text) {
   if (!text) return [];
 
@@ -808,7 +854,7 @@ function App(){
         // que parece. Si "live-sharepoint" empieza a caer a offline sin motivo
         // aparente, revisar este número primero.
         if(lines.length>500){setEvents(enrichEvents(FALLBACK));setSource("offline");return;}
-        const parsed = csvToEventosMatriz(lines);
+        const parsed = aplicarOverridesMatriz(csvToEventosMatriz(lines));
         setDebug("Filas: "+lines.length+", eventos: "+parsed.length);
         if(parsed.length>0){setEvents(enrichEvents(parsed));setSource(result.source);return;}
       }
