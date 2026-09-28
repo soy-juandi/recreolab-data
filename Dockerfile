@@ -1,3 +1,13 @@
 FROM nginx:alpine
-RUN wget -O /usr/share/nginx/html/index.html \
-    https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/index.html
+
+RUN apk add --no-cache git
+
+WORKDIR /repo
+RUN git clone --depth 1 https://github.com/soy-juandi/recreolab-data.git .
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+RUN rm -rf /usr/share/nginx/html && ln -s /repo /usr/share/nginx/html
+
+ENTRYPOINT ["/entrypoint.sh"]

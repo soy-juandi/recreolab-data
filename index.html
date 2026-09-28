@@ -7,7 +7,7 @@
     script-src   'unsafe-inline' https://unpkg.com;
     style-src    'unsafe-inline' https://fonts.googleapis.com;
     font-src     https://fonts.gstatic.com;
-    connect-src  https://docs.google.com https://sheets.googleapis.com https://raw.githubusercontent.com;
+    connect-src  'self' https://docs.google.com https://sheets.googleapis.com https://raw.githubusercontent.com;
     img-src      'self' data:;
   ">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
@@ -43,16 +43,20 @@ const { useState, useEffect, useMemo, useCallback } = React;
 const html = htm.bind(React.createElement);
 
 const YEAR       = 2026;
-const RETOS_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/retos_idrd.csv";
+// Mismo origen que este HTML (nginx sirve el checkout git de recreolab-data,
+// resincronizado cada 60s -- ver entrypoint.sh) en vez de raw.githubusercontent.com:
+// ese CDN cachea por ruta e ignora el cache-busting por query string, y puede
+// servir contenido de minutos/horas de antigüedad (confirmado 2026-09-28).
+const RETOS_CSV_URL = "/retos_idrd.csv";
 // Fuente única de Recreolab (2026-08-26): Google Sheets retirado por completo —
 // ver MIGRACION_RECREOLAB_SHAREPOINT.md. Formato tidy (una fila por evento),
 // publicado por office-script-recreolab-matriz.ts vía Power Automate a
 // recreolab-data/recreolab_matriz.csv. Sin fallback externo: si este fetch
 // falla, la app cae directo a los datos embebidos (FALLBACK, más abajo).
-const RECREOLAB_MATRIZ_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/recreolab_matriz.csv";
+const RECREOLAB_MATRIZ_CSV_URL = "/recreolab_matriz.csv";
 // Contrato CSV (publicado por office-script-talleres.ts vía Power Automate):
 // taller,fecha,hora,lugar,participantes,grupo,sesion — fecha en dd-mm-yyyy
-const TALLERES_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/talleres_oal.csv";
+const TALLERES_CSV_URL = "/talleres_oal.csv";
 
 // ── SANITIZACIÓN ─────────────────────────────────────────────
 function sanitize(val) {
@@ -527,7 +531,7 @@ const RETO_CLR = {
 // Los identificadores (FORTALECIMIENTO_*, fortalecimiento*) no se renombraron a
 // propósito, para minimizar el diff -- lo que cambió es el contenido, no el tab.
 // Contrato CSV (office-script-drafe-estrategias.ts): localidad,actividad,fecha,hora,direccion
-const FORTALECIMIENTO_CSV_URL = "https://raw.githubusercontent.com/soy-juandi/recreolab-data/main/drafe_estrategias.csv";
+const FORTALECIMIENTO_CSV_URL = "/drafe_estrategias.csv";
 
 // Red de seguridad si FORTALECIMIENTO_CSV_URL falla o no hay conexión -- las 6
 // filas reales del cronograma "1 al 12 de septiembre" vigente al momento de este
