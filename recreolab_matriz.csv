@@ -11,14 +11,18 @@ ID_Registro,Localidad,Fase_o_Subtipo,Nombre_Iniciativa_o_Evento,Fecha_Programada
 ,KEN,Sesión 1:Activalab,N/A,2026-09-04,5:00 p.m.,,Villas de Kennedy,Carrera 81D #54-31 sur,Salón comunal Villas de Kennedy
 ,KEN,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-11,5:00 p.m.,,Villas de Kennedy,Carrera 81D #54-31 sur,Salón comunal Villas de Kennedy
 ,SCR,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-26,9:00 a.m.,,Granada Sur,Avenida 1 de Mayo No. 1 - 40 Sur,Auditorio Alcaldía Local
-,ANT,Playlab (Iniciativa),N/A,,,,,,
-,ANT,Playlab (Iniciativa),N/A,,,,,,
+,ANT,Playlab (Iniciativa),"Mi vecino, mi amigo, juega conmigo",2026-10-17,1:00 p.m.,,Luna Park,Calle 11 sur con carrera 16,El Triángulo
+,ANT,Playlab (Iniciativa),Me la juego por el Poli,2026-11-07,,,,,
 ,TEU,Playlab (Iniciativa),Tejido de juventud,2026-10-31,02:00 p.m.,,Armenia,Carrera 16 #22-21,Parque Armenia
 ,CHA,Playlab (Iniciativa),"Los juegos tradicionales ""El encuentro del ayer y hoy con la montaña""",2026-09-19,09:00,,Bosques de Bella Vista,Carrera 1 A este # 101 -86 / Bosques de Bella Vista,Cuadra frente al polideportivo
 ,CHA,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-10,6:30  p.m.,,Chapinero Central,Carrera 9 #59-43,Urban 959
 ,USM,Sesión 1:Activalab,N/A,2026-09-18,3:00 p.m.,,Los Tejares,Carrera 8B #75B - 13 Sur,Parque Desarrollo Santa Librada - los Tejares 05-512
-,USM,Playlab (Iniciativa),N/A,2026-10-30,,,,Carrera 8B #75B - 13 Sur,Parque Desarrollo Santa Librada - los Tejares 05-512
+,USM,Playlab (Iniciativa),Juguémonosla por El Tesoro,2026-10-25,10:00 a.m.,,Vereda Arrayanes,Km 10 vía a San Juan del Sumapaz,Predio El Tesoro
+,USM,Playlab (Iniciativa),Parche al parque,2026-10-30,2:00 p.m.,,Los Tejares,Carrera 8f #75b - 13 Sur,Parque Los Tejares
 ,CHA,Playlab (Iniciativa) 1,Póngase en los chapines del otro,2026-09-26,3:00  p.m.,,Chapinero Central,Calle 60 #7-49,Parque Hippies
+,SCR,Playlab (Iniciativa) 1,La Roca en Acción y Reparación,2026-10-25,9:00 a.m.,,La Roca,Calle 6G Sur #8A-46 Este,Parque La Roca
+,SCR,Playlab (Iniciativa) 2,Día Dulce Granada Sur,2026-10-31,1:00 p.m.,,Granada Sur,Calle 24 sur con carrera 2 este,Parque Granada Sur
+,BOS,Playlab (Iniciativa) 2,"Olarte juega, Olarte se transforma",2026-10-23,1:00 p.m.,,Olarte,Calle 53 a bis sur con carrera 72 C,Parque Urbanización Olarte
 PLA-BOS-002,BOS,Playlab (Iniciativa),Des-Amor-tigüando Mitos,2026-08-19,9:00am,12:00pm,Bosa Carbonell / Carlos Albán,Calle 72 sur 79 d - 33,Bosa Carbonell a colegio Carlos Albán Holguín Sede A
 PLA-USM-001,USM,Playlab (Iniciativa),TEJIENDO TRADICIONALES A TRAVÉS DEL JUEGO,2026-08-22,2:00pm,5:00pm,"Marichuela, Almirante Padilla, Yomasa",Dg. 76b Sur # 1c-40,Plazoleta de la Biblioteca La Marichuela (Plazoleta Cultural)
 PLA-TEU-001,TEU,Playlab (Iniciativa),Unidos somos más equipo,2026-08-22,9:00am,12:00pm,Quinta Paredes,Carrera 44B # 22-65,Parque Cádiz
@@ -30,25 +34,20 @@ PLA-TUN-001,TUN,Playlab (Iniciativa),"Vive Venecia ""Un territorio que renace y 
 PLA-TUN-002,TUN,Playlab (Iniciativa),Un día de felicidad,2026-09-05,09:00,13:00,San Carlos,dg 51b sur con Cra 18b.,Parque proximidad San Carlos
 ACT-CHA-001,FON,Activalab,N/A,2026-09-09,17:00,,Belén,Calle 17B # 107-32,Salón comunal de Belén
 ,TEU,Activalab,N/A,2026-09-06,10:00,,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
-,ANT,Activalab,N/A,2026-09-19,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salón Comunal Policarpa
-,SUB,Activalab,N/A,2026-09-16,17:00,,Belén,Calle 17B # 107-32,Salón comunal de Belén
+,ANT,Activalab,N/A,2026-09-19,14:00,6:00 p.m.,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salón Comunal Policarpa
+,SUB,Activalab,"Guardianes de la unidad, vecinos del juego",2026-10-17,1:00 p.m.,,Bilbao,Carrera 150d #142C-36,Parque de la Virgen
+,ANT,Activalab,N/A,2026-09-26,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salón Comunal Policarpa
 ,SUB,Playlab (Iniciativa),N/A,2026-09-26,3:00  p.m.,,Chapinero Central,Calle 60 #7-49,Parque Hippies
-,TEU,Playlab (Iniciativa),N/A,2026-09-13,10:00,,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
-,ANT,Entrenalab,N/A,2026-09-26,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salón Comunal Policarpa
+,FON,Playlab (Iniciativa),N/A,2026-09-16,17:00,,Belén,Calle 17B # 107-32,Salón comunal de Belén
+,SUB,Entrenalab,N/A,2026-09-26,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salón Comunal Policarpa
 ,FON,Entrenalab,N/A,2026-09-16,17:00,,Belén,Calle 17B # 107-32,Salón comunal de Belén
+,USM,Playlab (Iniciativa),N/A,2026-09-24,3:00 p.m.,,Los Tejares,Carrera 8B #75B - 13 Sur,Parque Desarrollo Santa Librada - los Tejares 05-512
 ,USM,Entrenalab,N/A,2026-09-24,3:00 p.m.,,Los Tejares,Carrera 8B #75B - 13 Sur,Parque Desarrollo Santa Librada - los Tejares 05-512
 ,TEU,Entrenalab,Teusaquillo DA DI PARK,2026-09-26,09:00,,Alfonso López,Calle 50 con carrera 21,Parque Alfonso Lopez
-,TEU,Entrenalab,Tejido de juventud,2026-10-31,02:00 p.m.,,Armenia,Carrera 16 #22-21,Parque Armenia
 ,USM,Playlab (Iniciativa),Unidos somos mas,2026-09-20,09:00,13:00,El Tuno,Calle 117 a sur # 0 - 58,Campo deportivo
 ,TEU,Playlab (Iniciativa),Teusaquillo DA DI PARK,2026-09-26,09:00,,Alfonso López,Calle 50 con carrera 21,Parque Alfonso Lopez
-,SUB,Playlab (Iniciativa),N/A,2026-09-27,08:30 A.M.,,Bilbao,Calle 143b No 151a - 16,Casa de los Abuelos
 ,FON,Playlab (Iniciativa),Juegos por la cuadra y risas por la calle,2026-10-04,09:00 a.m.,,Belén,Calle 17B # 107-33,Salón comunal de Belén
+,SUB,Playlab (Iniciativa),N/A,2026-09-27,08:30 A.M.,,Bilbao,Calle 143b No 151a - 16,Casa de los Abuelos
 ,SUB,Playlab (Iniciativa),N/A,2026-09-20,10:00,,Bilbao,Calle 143b No 151a - 16,Casa de los Abuelos
-,SUB,Sesión 2: Entrenalab / Fusionlab,N/A,2026-09-27,08:30 A.M.,,Bilbao,Calle 143b No 151a - 16,Casa de los Abuelos
 ,KEN,Playlab (Iniciativa),Vecinos al parque,2026-10-04,10:00 a.m.,,Carmelo III,Calle 53b Sur #82b - 28,Parque Carmelo III
 ,KEN,Playlab (Iniciativa),Unión de la vecindad,2026-10-10,9:00 a.m.,,Villas de Kennedy,Carrera 81i con calle 54a sur,N/A
-,ANT,Playlab (Iniciativa),N/A,2026-10-17,1:00 p.m.,,,,Bahía Luna Park
-,SUB,Playlab (Iniciativa),N/A,2026-10-17,1:00 p.m.,,,,Parque de La Virgen
-,BOS,Playlab (Iniciativa),N/A,2026-10-23,1:00 p.m.,,Olarte,Calle 53 a bis sur con carrera 72 C,Parque Urbanización Olarte
-,SCR,Playlab (Iniciativa),N/A,2026-10-25,9:00 a.m.,,La Roca,,Parque La Roca
-,KEN,Playlab (Iniciativa),N/A,2026-10-24,,,,,
