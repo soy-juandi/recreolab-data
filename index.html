@@ -871,7 +871,14 @@ function App(){
   },[tab,retosSource]);
 
   useEffect(()=>{
-    if(tab==="parques")setMonth(4);
+    if(tab==="parques"){
+      // 2026-11-12: antes forzaba mayo; ahora abre en el mes del próximo evento (o del último si ya pasaron todos).
+      const hoy=new Date();const hoy0=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate());
+      const conFecha=parquesEnriched.filter(e=>e.parsed&&!e.parsed.monthOnly&&e.parsed.d);
+      const futuros=conFecha.filter(e=>new Date(e.parsed.y,e.parsed.m,e.parsed.d)>=hoy0).map(e=>e.parsed.m);
+      const todos=conFecha.map(e=>e.parsed.m);
+      setMonth(futuros.length?Math.min(...futuros):(todos.length?Math.max(...todos):4));
+    }
     else if(tab==="talleres"){
       const meses=talleresEnriched.filter(e=>e.parsed&&!e.parsed.monthOnly).map(e=>e.parsed.m);
       setMonth(meses.length?Math.min(...meses):4);
