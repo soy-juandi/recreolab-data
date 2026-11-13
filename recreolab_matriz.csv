@@ -14,12 +14,14 @@ ID_Registro,Localidad,Fase_o_Subtipo,Nombre_Iniciativa_o_Evento,Fecha_Programada
 ,ANT,Playlab (Iniciativa),"Mi vecino, mi amigo, juega conmigo",2026-10-17,1:00 p.m.,,Luna Park,Calle 11 sur con carrera 16,El Triángulo
 ,ANT,Playlab (Iniciativa),Me la juego por el Poli,2026-11-07,10:00 a.m.,,Policarpa,Carrerra 10 bis 3-58 sur,Salón Comunal Policarpa
 ,TEU,Playlab (Iniciativa),Tejido de juventud,2026-10-31,02:00 p.m.,,Armenia,Carrera 16a #28a-21,Parque Armenia
+,SUB,Sesión 1:Activalab,N/A,2026-09-20,10:00,,Bilbao,Calle 143b No 151a - 16,Casa de los Abuelos
 ,CHA,Playlab (Iniciativa),"Los juegos tradicionales ""El encuentro del ayer y hoy con la montaña""",2026-09-19,09:00,,Bosques de Bella Vista,Carrera 1 A este # 101 -86 / Bosques de Bella Vista,Cuadra frente al polideportivo
 ,CHA,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-10,6:30  p.m.,,Chapinero Central,Carrera 9 #59-43,Urban 959
 ,USM,Sesión 1:Activalab,N/A,2026-09-18,3:00 p.m.,,Los Tejares,Carrera 8B #75B - 13 Sur,Parque Desarrollo Santa Librada - los Tejares 05-512
 ,USM,Playlab (Iniciativa),Juguémonosla por El Tesoro,2026-11-22,10:00 a.m.,,Vereda Arrayanes,Km 10 vía a San Juan del Sumapaz,Predio El Tesoro
 ,USM,Playlab (Iniciativa),Parche al Parque,2026-10-30,2:00 p.m.,,Los Tejares,Carrera 8f #75b - 13 Sur,Casa cultural sentipensar
 ,CHA,Playlab (Iniciativa) 1,Póngase en los chapines del otro,2026-09-26,3:00  p.m.,,Chapinero Central,Calle 60 #7-49,Parque Hippies
+,TEU,Sesión 2:Entrenalab / Fusionlab,N/A,2026-09-13,10:00,,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
 ,SCR,Playlab (Iniciativa) 1,La Roca en Acción y Reparación,2026-10-25,9:00 a.m.,,La Roca,Calle 6G Sur #8A-46 Este,Parque La Roca
 ,SCR,Playlab (Iniciativa) 2,Día Dulce Granada Sur,2026-10-31,1:00 p.m.,,Granada Sur,Calle 24 sur con carrera 2 Este,Parque Granada Sur
 ,BOS,Playlab (Iniciativa) 2,"Olarte juega, Olarte se transforma",2026-10-23,1:00 p.m.,,Olarte,Calle 53 a bis sur con carrera 72 C,Parque Urbanización Olarte
@@ -27,7 +29,6 @@ ID_Registro,Localidad,Fase_o_Subtipo,Nombre_Iniciativa_o_Evento,Fecha_Programada
 ,SCR,Playlab (Iniciativa) 3,San Rafa renace por la vida,2026-11-08,9:00 a.m.,,San Rafael,Calle 58 sur #15c Este,N/A
 ,FON,Playlab (Iniciativa),Semillas Originarias Fontibón,2026-11-07,1:00 p.m.,,Fontibón Centro,Calle 17D # 103B - 28,N/A
 ,TEU,Playlab (Iniciativa),Teusaquillo DA DI PARK,2026-09-26,09:00,,Alfonso López,Calle 50 con carrera 21,Parque Alfonso Lopez
-,SAN,Playlab (Iniciativa),PENDIENTE,2026-11-21,12:00 p.m.,,Lourdes,Calle 3 #2-64E,N/A
 ,TEU,Recreolab Express,N/A,2026-11-08,10:00 a.m.,,Quinta Paredes,Calle 22 Bis No. 45-57,Edificio Villa Cielo
 ,KEN,Playlab (Iniciativa) 3,Tierra Buena educa jugando,2026-11-28,10:00 a.m.,,Tierra Buena,Calle 34a sur #99a - 37,Parque Tierra Buena
 ,ENG,Recreolab Express,N/A,2026-11-11,5:00 p.m.,,Palo Blanco,Carrera 70c bis #71-30,Salón comunal Palo Blanco
@@ -35,7 +36,8 @@ ID_Registro,Localidad,Fase_o_Subtipo,Nombre_Iniciativa_o_Evento,Fecha_Programada
 ,TEU,Playlab (Iniciativa),Actitud y diversiòn en el parque La luisita,2026-11-21,10:00,,Quinta Paredes,Calle 22 Bis No. 45-57,Parque la Luisita (Santa Clara)
 ,TUN,Recreolab Express,N/A,2026-11-13,3:00 p.m.,,Villa Jimena,Cra. 29A # 57F - 27 Sur,Casa de la Participación de Tunjuelito
 ,SFE,Recreolab Express,N/A,2026-10-22,2:00 p.m.,,Lourdes,Calle 3 No. A-11 Este,Salón comunal Lourdes
-,ENG,Playlab (Iniciativa),Palo blanco en acción,2026-11-29,10:00 a.m.,,Palo Blanco,Calle 70A # 70B-29,Parque Urbanización Palo Blanco
+,ENG,Playlab (Iniciativa),Palo blanco en acción,2026-11-29,10:00 a.m.,,Palo Blanco,Calle 70A No. 70B-29,Parque Urbanización Palo Blanco
+,SAN,Playlab (Iniciativa),Lourdes juega y activa,2026-11-21,12:00 p.m.,,Lourdes,Calle 3 #2-64E,N/A
 PLA-BOS-002,BOS,Playlab (Iniciativa),Des-Amor-tigüando Mitos,2026-08-19,9:00am,12:00pm,Bosa Carbonell / Carlos Albán,Calle 72 sur 79 d - 33,Bosa Carbonell a colegio Carlos Albán Holguín Sede A
 PLA-USM-001,USM,Playlab (Iniciativa),TEJIENDO TRADICIONALES A TRAVÉS DEL JUEGO,2026-08-22,2:00pm,5:00pm,"Marichuela, Almirante Padilla, Yomasa",Dg. 76b Sur # 1c-40,Plazoleta de la Biblioteca La Marichuela (Plazoleta Cultural)
 PLA-TEU-001,TEU,Playlab (Iniciativa),Unidos somos más equipo,2026-08-22,9:00am,12:00pm,Quinta Paredes,Carrera 44B # 22-65,Parque Cádiz
@@ -43,22 +45,17 @@ PLA-MAR-001,MAR,Playlab (Iniciativa),Juegos del pasado presente y comunidad de h
 PLA-SUB-003,SUB,Playlab (Iniciativa),El Tejer del Viento,2026-08-30,11:00am,16:00,San Jorge,Cll 127 C con Cra 87 A,Tanque del Indio - Parque Las Cometas
 PLA-FON-001,FON,Playlab (Iniciativa),Jugando Unidos por la Cabaña,2026-09-05,8:00am,1:00pm,La Cabaña,Carrera 104B # 23G - 17,Parque La Cabaña
 PLA-FON-002,FON,Playlab (Iniciativa),"Cambulos y Gualandays  "" Enamorémonos de nuestro barrio """,2026-08-22,9:00am,12:00pm,Los Cambulos,Calle 23G  # 108 - 32,Parque Los Cambulos
-PLA-TUN-001,TUN,Playlab (Iniciativa),"Vive Venecia ""Un territorio que renace y enaltece""",2026-08-30,09:00,13:00,Venecia,dgnal 49sur # 53a 92,parque proximidad Venecia
-PLA-TUN-002,TUN,Playlab (Iniciativa),Un día de felicidad,2026-09-05,09:00,13:00,San Carlos,dg 51b sur con Cra 18b.,Parque proximidad San Carlos
-ACT-CHA-001,FON,Activalab,N/A,2026-09-09,17:00,,Belén,Calle 17B # 107-32,Salón comunal de Belén
 ,TEU,Activalab,N/A,2026-09-06,10:00,,La soledad,Carrera 19#39b-59,Casa raizal de Teusaquillo
 ,ANT,Activalab,N/A,2026-09-19,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salón Comunal Policarpa
-,SUB,Activalab,"Guardianes de la unidad, vecinos del juego",2026-10-17,1:00 p.m.,,Bilbao,Carrera 150d #142C-36,Parque de la Virgen
+,FON,Activalab,N/A,2026-09-09,17:00,12:00am,Belén,Calle 17B # 107-32,Salón comunal de Belén
 ,FON,Playlab (Iniciativa),Juegos por la cuadra y risas por la calle,2026-10-04,09:00 a.m.,,Belén,Calle 17B # 107-33,Salón comunal de Belén
-,SUB,Entrenalab,N/A,2026-09-26,14:00,,Policarpa,Carrera 10 BIS # 3- 58 Sur,Salón Comunal Policarpa
 ,FON,Entrenalab,N/A,2026-09-16,17:00,,Belén,Calle 17B # 107-32,Salón comunal de Belén
 ,USM,Playlab (Iniciativa),Unidos somos mas,2026-09-20,09:00,,El Tuno,Calle 117 a sur # 0 - 58,Campo deportivo
-,USM,Entrenalab,N/A,2026-09-24,3:00 p.m.,,Los Tejares,Carrera 8B #75B - 13 Sur,Parque Desarrollo Santa Librada - los Tejares 05-512
-,TEU,Entrenalab,Teusaquillo DA DI PARK,2026-09-26,09:00,,Alfonso López,Calle 50 con carrera 21,Parque Alfonso Lopez
-,SUB,Entrenalab,"Guardianes de la unidad, vecinos del juego",2026-10-17,1:00 p.m.,,Bilbao,Carrera 150d #142C-36,Parque de la Virgen
-,SUB,Playlab (Iniciativa),"Guardianes de la unidad, vecinos del juego",2026-10-17,1:00 p.m.,13:00,Bilbao,Carrera 150d #142C-36,Parque de la Virgen
-,SUB,Playlab (Iniciativa),"Juega limpio, sin violencia y con respeto",2026-11-20,09:00,,Tierra Linda,Calle 127c No 50a - 20,Parque Tierra Linda (Parque de los Millos)
-,SUB,Playlab (Iniciativa),N/A,2026-09-27,08:30 A.M.,,Bilbao,Calle 143b No 151a - 16,Casa de los Abuelos
-,SUB,Playlab (Iniciativa),N/A,2026-09-20,10:00,,Bilbao,Calle 143b No 151a - 16,Casa de los Abuelos
 ,KEN,Playlab (Iniciativa),Vecinos al parque,2026-10-04,10:00 a.m.,,Carmelo III,Calle 53b Sur #82b - 28,Parque Carmelo III
 ,KEN,Playlab (Iniciativa),Unión de la vecindad,2026-10-10,9:00 a.m.,,Villas de Kennedy,Carrera 81i con calle 54a sur,N/A
+PLA-TUN-001,TUN,Playlab (Iniciativa),"Vive Venecia ""Un territorio que renace y enaltece""",2026-08-30,09:00,13:00,Venecia,dgnal 49sur # 53a 92,parque proximidad Venecia
+PLA-TUN-002,TUN,Playlab (Iniciativa),Un día de felicidad,2026-09-05,09:00,13:00,San Carlos,dg 51b sur con Cra 18b.,Parque proximidad San Carlos
+,USM,Entrenalab,N/A,2026-09-24,3:00 p.m.,6:00 p.m.,Los Tejares,Carrera 8B #75B - 13 Sur,Parque Desarrollo Santa Librada - los Tejares 05-512
+,SUB,Playlab (Iniciativa),"Guardianes de la unidad, vecinos del juego",2026-10-17,1:00 p.m.,13:00,Bilbao,Carrera 150d #142C-36,Parque de la Virgen
+,SUB,Playlab (Iniciativa),"Juega limpio, sin violencia y con respeto",2026-11-20,09:00,,Tierra Linda,Calle 127c No 50a - 20,Parque Tierra Linda (Parque de los Millos)
+,SUB,Sesión 2: Entrenalab / Fusionlab,N/A,2026-09-27,08:30 A.M.,,Bilbao,Calle 143b No 151a - 16,Casa de los Abuelos
